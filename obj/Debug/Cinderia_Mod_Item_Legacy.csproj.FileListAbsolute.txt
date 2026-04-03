@@ -1,0 +1,6 @@
+C:\Programs\Steam\steamapps\common\Cinderia\BepInEx\plugins\Cinderia_Mod_Item_Legacy.dll
+C:\Programs\Steam\steamapps\common\Cinderia\BepInEx\plugins\Cinderia_Mod_Item_Legacy.pdb
+C:\Programs\Steam\steamapps\common\Cinderia\Cinderia_Mod_Item_Legacy\obj\Debug\Cinderia_Mod_Item_Legacy.csproj.AssemblyReference.cache
+C:\Programs\Steam\steamapps\common\Cinderia\Cinderia_Mod_Item_Legacy\obj\Debug\Cinderia_Mod_Item_Legacy.csproj.CoreCompileInputs.cache
+C:\Programs\Steam\steamapps\common\Cinderia\Cinderia_Mod_Item_Legacy\obj\Debug\Cinderia_Mod_Item_Legacy.dll
+C:\Programs\Steam\steamapps\common\Cinderia\Cinderia_Mod_Item_Legacy\obj\Debug\Cinderia_Mod_Item_Legacy.pdb
