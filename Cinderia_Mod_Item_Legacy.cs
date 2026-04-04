@@ -6,6 +6,7 @@ using HarmonyLib;
 using Newtonsoft.Json;
 using Rogue;
 using Rogue.Items;
+using Rogue.NPCs;
 using Rogue.Units;
 using System;
 using System.IO;
@@ -436,31 +437,15 @@ namespace Cinderia_Mod_Item_Legacy
         }
     }
 
-    // 第一次开普通道具宝箱后：额外掉落记录道具
-    [HarmonyPatch(typeof(道具宝箱大), "获得奖励")]
-    internal static class Patch_DropPendingOnFirstNormalChest
+    // 和垃圾屋NPC对话随机给道具时：额外掉落记录道具
+    [HarmonyPatch(typeof(NPC), "垃圾屋随机道具")]
+    internal static class Patch_DropPendingOnJunkyardNpcDialog
     {
-        private static void Postfix(道具宝箱大 __instance)
+        private static void Postfix(NPC __instance)
         {
-            Vector3 pos = __instance != null && __instance.爆金币点 != null
-                ? __instance.爆金币点.position
-                : (__instance != null ? __instance.transform.position : Vector3.zero);
+            Vector3 pos = __instance != null ? __instance.transform.position : Vector3.zero;
 
-            Cinderia_Mod_Item_Legacy.TryDropPendingItem(pos, "道具宝箱大.获得奖励.Postfix");
-        }
-    }
-
-    // 第一次开侵蚀宝箱后：额外掉落记录道具
-    [HarmonyPatch(typeof(侵蚀宝箱), "爆资源")]
-    internal static class Patch_DropPendingOnFirstHellChest
-    {
-        private static void Postfix(侵蚀宝箱 __instance)
-        {
-            Vector3 pos = __instance != null && __instance.爆金币点 != null
-                ? __instance.爆金币点.position
-                : (__instance != null ? __instance.transform.position : Vector3.zero);
-
-            Cinderia_Mod_Item_Legacy.TryDropPendingItem(pos, "侵蚀宝箱.爆资源.Postfix");
+            Cinderia_Mod_Item_Legacy.TryDropPendingItem(pos, "NPC.垃圾屋随机道具.Postfix");
         }
     }
 
