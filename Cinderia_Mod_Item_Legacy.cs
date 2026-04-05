@@ -207,22 +207,22 @@ namespace Cinderia_Mod_Item_Legacy
 
         private void InitConfig()
         {
+            const string dropSection = "LegacyDrop";
+            Cfg_额外掉落记录道具_启用 = Config.Bind(dropSection, "启用", true, "是否启用‘每局结束记录最高道具，并在下局开始时和拾荒者NPC对话额外掉落该道具’");
+            Cfg_额外掉落记录道具_ID = Config.Bind(dropSection, "记录道具ID", "", "内部使用：记录上局最高道具ID。可手动填写以指定下次额外掉落道具。留空表示无。") ;
+
             const string section = "TreasureMap4";
-            Cfg_TreasureMap4_战斗结算触发概率 = Config.Bind(section, "战斗结算触发概率", 1f, "藏宝图四buff的triggerChance（0~1）");
+            Cfg_TreasureMap4_战斗结算触发概率 = Config.Bind(section, "战斗结算触发概率", 1f, "藏宝图4触发总概率（0~1，下面各宝箱概率之和要等于这个值）");
             Cfg_TreasureMap4_小宝箱最终概率 = Config.Bind(section, "小宝箱最终概率", 0.50f, "清空房间后最终获得小海盗宝箱的概率（0~1）");
             Cfg_TreasureMap4_中宝箱最终概率 = Config.Bind(section, "中宝箱最终概率", 0.35f, "清空房间后最终获得中海盗宝箱的概率（0~1）");
             Cfg_TreasureMap4_大宝箱最终概率 = Config.Bind(section, "大宝箱最终概率", 0.15f, "清空房间后最终获得大海盗宝箱的概率（0~1）");
 
             const string duplicatorSection = "Duplicator";
             Cfg_复制器_启用 = Config.Bind(duplicatorSection, "启用", true, "是否注入新增道具“复制器”");
-            Cfg_复制器_绿概率 = Config.Bind(duplicatorSection, "绿概率", 0.30f, "拥有绿色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
-            Cfg_复制器_蓝概率 = Config.Bind(duplicatorSection, "蓝概率", 0.50f, "拥有蓝色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
-            Cfg_复制器_紫概率 = Config.Bind(duplicatorSection, "紫概率", 0.70f, "拥有紫色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
-            Cfg_复制器_橙概率 = Config.Bind(duplicatorSection, "橙概率", 0.90f, "拥有橙色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
-
-            const string dropSection = "LegacyDrop";
-            Cfg_额外掉落记录道具_启用 = Config.Bind(dropSection, "启用", true, "是否启用‘每局结束记录最高道具，并在下局第一次开宝箱时额外掉落该道具’");
-            Cfg_额外掉落记录道具_ID = Config.Bind(dropSection, "记录道具ID", "", "内部使用：记录上局最高道具ID。可手动填写以指定下次额外掉落道具。留空表示无。") ;
+            Cfg_复制器_绿概率 = Config.Bind(duplicatorSection, "绿概率", 0.30f, "拥有绿色复制器时，房间奖励额外复制一份的概率（0~1）");
+            Cfg_复制器_蓝概率 = Config.Bind(duplicatorSection, "蓝概率", 0.50f, "拥有蓝色复制器时，房间奖励额外复制一份的概率（0~1）");
+            Cfg_复制器_紫概率 = Config.Bind(duplicatorSection, "紫概率", 0.70f, "拥有紫色复制器时，房间奖励额外复制一份的概率（0~1）");
+            Cfg_复制器_橙概率 = Config.Bind(duplicatorSection, "橙概率", 0.90f, "拥有橙色复制器时，房间奖励额外复制一份的概率（0~1）");
 
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] Config loaded. trigger="
                 + Cfg_TreasureMap4_战斗结算触发概率.Value.ToString("0.###")
@@ -701,7 +701,7 @@ namespace Cinderia_Mod_Item_Legacy
             Vector3 pos = __instance != null ? __instance.transform.position : Vector3.zero;
 
             Cinderia_Mod_Item_Legacy.TryDropPendingItem(pos, "NPC.垃圾屋随机道具.Postfix");
-            Cinderia_Mod_Item_Legacy.DropHighestDuplicatorForTest(pos, "NPC.垃圾屋随机道具.Postfix");
+            // Cinderia_Mod_Item_Legacy.DropHighestDuplicatorForTest(pos, "NPC.垃圾屋随机道具.Postfix");
         }
     }
 
