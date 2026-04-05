@@ -2,6 +2,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInEx.Unity.Mono;
+using Cysharp.Threading.Tasks;
 using HarmonyLib;
 using Newtonsoft.Json;
 using Rogue;
@@ -24,6 +25,7 @@ namespace Cinderia_Mod_Item_Legacy
 
         private Harmony _harmony;
         private static ConfigFile _configFile;
+        private static bool _creatingDuplicatedReward;
 
         private static bool _bonusGivenThisRun;
         private static bool _itemDumpDoneThisSession;
@@ -34,6 +36,13 @@ namespace Cinderia_Mod_Item_Legacy
         private static ConfigEntry<float> Cfg_TreasureMap4_小宝箱最终概率;
         private static ConfigEntry<float> Cfg_TreasureMap4_中宝箱最终概率;
         private static ConfigEntry<float> Cfg_TreasureMap4_大宝箱最终概率;
+
+        // ===== 复制器配置（BepInEx cfg） =====
+        private static ConfigEntry<bool> Cfg_复制器_启用;
+        private static ConfigEntry<float> Cfg_复制器_绿概率;
+        private static ConfigEntry<float> Cfg_复制器_蓝概率;
+        private static ConfigEntry<float> Cfg_复制器_紫概率;
+        private static ConfigEntry<float> Cfg_复制器_橙概率;
 
         // ===== 额外掉落记录道具配置（BepInEx cfg） =====
         private static ConfigEntry<bool> Cfg_额外掉落记录道具_启用;
@@ -85,6 +94,7 @@ namespace Cinderia_Mod_Item_Legacy
             _bonusGivenThisRun = false;
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] New run started. pendingItem=" + PendingItemId);
 
+            EnsureCustomDuplicatorItems();
             DumpAllItemsToFile();
             ApplyTreasureMap4Tweaks();
         }
@@ -116,10 +126,10 @@ namespace Cinderia_Mod_Item_Legacy
 
                 if (buff藏宝图四 != null)
                 {
-                    float triggerChance = Mathf.Clamp01(Cfg_TreasureMap4_战斗结算触发概率?.Value ?? 0.8f);
-                    float finalSmallTarget = Mathf.Max(0f, Cfg_TreasureMap4_小宝箱最终概率?.Value ?? 0.45f);
-                    float finalMidTarget = Mathf.Max(0f, Cfg_TreasureMap4_中宝箱最终概率?.Value ?? 0.25f);
-                    float finalBigTarget = Mathf.Max(0f, Cfg_TreasureMap4_大宝箱最终概率?.Value ?? 0.10f);
+                    float triggerChance = Mathf.Clamp01(Cfg_TreasureMap4_战斗结算触发概率?.Value ?? 1f);
+                    float finalSmallTarget = Mathf.Max(0f, Cfg_TreasureMap4_小宝箱最终概率?.Value ?? 0.50f);
+                    float finalMidTarget = Mathf.Max(0f, Cfg_TreasureMap4_中宝箱最终概率?.Value ?? 0.35f);
+                    float finalBigTarget = Mathf.Max(0f, Cfg_TreasureMap4_大宝箱最终概率?.Value ?? 0.15f);
 
                     float oldTriggerChance = buff藏宝图四.triggerChance;
                     buff藏宝图四.triggerChance = triggerChance;
@@ -198,10 +208,17 @@ namespace Cinderia_Mod_Item_Legacy
         private void InitConfig()
         {
             const string section = "TreasureMap4";
-            Cfg_TreasureMap4_战斗结算触发概率 = Config.Bind(section, "战斗结算触发概率", 0.8f, "藏宝图四buff的triggerChance（0~1）");
-            Cfg_TreasureMap4_小宝箱最终概率 = Config.Bind(section, "小宝箱最终概率", 0.45f, "清空房间后最终获得小海盗宝箱的概率（0~1）");
-            Cfg_TreasureMap4_中宝箱最终概率 = Config.Bind(section, "中宝箱最终概率", 0.25f, "清空房间后最终获得中海盗宝箱的概率（0~1）");
-            Cfg_TreasureMap4_大宝箱最终概率 = Config.Bind(section, "大宝箱最终概率", 0.10f, "清空房间后最终获得大海盗宝箱的概率（0~1）");
+            Cfg_TreasureMap4_战斗结算触发概率 = Config.Bind(section, "战斗结算触发概率", 1f, "藏宝图四buff的triggerChance（0~1）");
+            Cfg_TreasureMap4_小宝箱最终概率 = Config.Bind(section, "小宝箱最终概率", 0.50f, "清空房间后最终获得小海盗宝箱的概率（0~1）");
+            Cfg_TreasureMap4_中宝箱最终概率 = Config.Bind(section, "中宝箱最终概率", 0.35f, "清空房间后最终获得中海盗宝箱的概率（0~1）");
+            Cfg_TreasureMap4_大宝箱最终概率 = Config.Bind(section, "大宝箱最终概率", 0.15f, "清空房间后最终获得大海盗宝箱的概率（0~1）");
+
+            const string duplicatorSection = "Duplicator";
+            Cfg_复制器_启用 = Config.Bind(duplicatorSection, "启用", true, "是否注入新增道具“复制器”");
+            Cfg_复制器_绿概率 = Config.Bind(duplicatorSection, "绿概率", 0.30f, "拥有绿色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
+            Cfg_复制器_蓝概率 = Config.Bind(duplicatorSection, "蓝概率", 0.50f, "拥有蓝色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
+            Cfg_复制器_紫概率 = Config.Bind(duplicatorSection, "紫概率", 0.70f, "拥有紫色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
+            Cfg_复制器_橙概率 = Config.Bind(duplicatorSection, "橙概率", 0.90f, "拥有橙色复制器时，房间奖励额外复制同一份道具奖励的概率（0~1）");
 
             const string dropSection = "LegacyDrop";
             Cfg_额外掉落记录道具_启用 = Config.Bind(dropSection, "启用", true, "是否启用‘每局结束记录最高道具，并在下局第一次开宝箱时额外掉落该道具’");
@@ -212,6 +229,7 @@ namespace Cinderia_Mod_Item_Legacy
                 + ", small=" + Cfg_TreasureMap4_小宝箱最终概率.Value.ToString("0.###")
                 + ", middle=" + Cfg_TreasureMap4_中宝箱最终概率.Value.ToString("0.###")
                 + ", big=" + Cfg_TreasureMap4_大宝箱最终概率.Value.ToString("0.###")
+                + ", duplicatorEnabled=" + Cfg_复制器_启用.Value
                 + ", legacyDropEnabled=" + Cfg_额外掉落记录道具_启用.Value
                 + ", pendingItem=" + (Cfg_额外掉落记录道具_ID.Value ?? ""));
         }
@@ -246,6 +264,118 @@ namespace Cinderia_Mod_Item_Legacy
             catch (Exception ex)
             {
                 Log.LogError("[Cinderia_Mod_Item_Legacy] DumpAllItemsToFile error: " + ex);
+            }
+        }
+
+        internal static void EnsureCustomDuplicatorItems()
+        {
+            try
+            {
+                if (!(Cfg_复制器_启用?.Value ?? true))
+                    return;
+
+                if (Game.Inst == null || Game.Inst.excel == null || Game.Inst.excel.magicCards == null)
+                    return;
+
+                MagicCardData template = Game.Inst.excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
+                if (template == null)
+                {
+                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] 无法注入复制器，缺少模板道具 藏宝图4");
+                    return;
+                }
+
+                var list = Game.Inst.excel.magicCards.ToList();
+                bool addedAny = false;
+                RemoveDuplicatorItemIfExists(list, 0);
+                for (int lv = 1; lv <= 4; lv++)
+                {
+                    string id = GetDuplicatorItemId(lv);
+                    MagicCardData existing = list.FirstOrDefault(c => c != null && c.id == id);
+                    if (existing != null)
+                    {
+                        existing.name = "复制器";
+                        existing.icon = "藏宝图";
+                        existing.ItemLv = lv;
+                        existing.introduce = BuildDuplicatorIntroduce(lv);
+                        existing.strength = 0;
+                        existing.agility = 0;
+                        existing.intelligence = 0;
+                        existing.buffs = Array.Empty<string>();
+                        existing.skills = Array.Empty<string>();
+                        continue;
+                    }
+
+                    MagicCardData item = template.Clone();
+                    item.id = id;
+                    item.name = "复制器";
+                    item.kind = "道具";
+                    item.ItemLv = lv;
+                    item.icon = "藏宝图";
+                    item.introduce = BuildDuplicatorIntroduce(lv);
+                    item.叠层buff = "";
+                    item.CardData = "";
+                    item.CardAtk = 0f;
+                    item.CardAtk2 = 0f;
+                    item.CardCD = 0f;
+                    item.CardCharge = 0;
+                    item.color = "";
+                    item.tipRule = "无";
+                    item.strength = 0;
+                    item.agility = 0;
+                    item.intelligence = 0;
+                    item.buffs = Array.Empty<string>();
+                    item.skills = Array.Empty<string>();
+                    item.keyward = Array.Empty<string>();
+                    item.groups = Array.Empty<string>();
+                    item.preconditions = Array.Empty<string>();
+                    item.mutex = Array.Empty<string>();
+                    item.powerRarity = 1;
+                    item.刷新权重 = 1f;
+                    item.ban = true;
+                    item.是否商店解锁 = false;
+                    item.显示在图鉴 = true;
+
+                    list.Add(item);
+                    addedAny = true;
+                }
+
+                UpdateDuplicatorItemDescriptions(list);
+
+                Game.Inst.excel.magicCards = list.ToArray();
+                if (addedAny)
+                {
+                    Log.LogInfo("[Cinderia_Mod_Item_Legacy] 已注入复制器道具 4 个等级版本（绿~橙）");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("[Cinderia_Mod_Item_Legacy] EnsureCustomDuplicatorItems error: " + ex);
+            }
+        }
+
+        private static void UpdateDuplicatorItemDescriptions(System.Collections.Generic.List<MagicCardData> list)
+        {
+            for (int lv = 1; lv <= 4; lv++)
+            {
+                string id = GetDuplicatorItemId(lv);
+                MagicCardData item = list.FirstOrDefault(c => c != null && c.id == id);
+                if (item == null)
+                    continue;
+
+                item.introduce = BuildDuplicatorIntroduce(lv);
+                item.strength = 0;
+                item.agility = 0;
+                item.intelligence = 0;
+            }
+        }
+
+        private static void RemoveDuplicatorItemIfExists(System.Collections.Generic.List<MagicCardData> list, int level)
+        {
+            string id = GetDuplicatorItemId(level);
+            MagicCardData existing = list.FirstOrDefault(c => c != null && c.id == id);
+            if (existing != null)
+            {
+                list.Remove(existing);
             }
         }
 
@@ -307,6 +437,99 @@ namespace Cinderia_Mod_Item_Legacy
                 + "清空房间：有" + ToPercentText(finalMid) + "几率找到一个普通海盗宝箱。\n"
                 + "清空房间：有" + ToPercentText(finalBig) + "几率找到一个高级海盗宝箱。\n"
                 + "装备：打开宝箱时获得1点随机属性。";
+        }
+
+        private static string BuildDuplicatorIntroduce(int level)
+        {
+            float chance = GetDuplicatorChanceByLevel(level);
+            return "清空房间掉落奖励时：有" + ToPercentText(chance) + "几率额外掉落一份相同的房间奖励。";
+        }
+
+        private static string GetDuplicatorItemId(int level)
+        {
+            return "复制器" + level;
+        }
+
+        private static float GetDuplicatorChanceByLevel(int level)
+        {
+            switch (level)
+            {
+                case 1: return Mathf.Clamp01(Cfg_复制器_绿概率?.Value ?? 0.30f);
+                case 2: return Mathf.Clamp01(Cfg_复制器_蓝概率?.Value ?? 0.50f);
+                case 3: return Mathf.Clamp01(Cfg_复制器_紫概率?.Value ?? 0.70f);
+                case 4: return Mathf.Clamp01(Cfg_复制器_橙概率?.Value ?? 0.90f);
+                default: return 0f;
+            }
+        }
+
+        internal static float GetCurrentDuplicatorTriggerChance()
+        {
+            if (!(Cfg_复制器_启用?.Value ?? true))
+                return 0f;
+
+            MagicCard_Manager mgr = MagicCard_Manager.Inst;
+            if (mgr == null || mgr.道具列表 == null)
+                return 0f;
+
+            float total = 0f;
+            foreach (RuntimeMagicCard card in mgr.道具列表)
+            {
+                if (card == null || card.data == null)
+                    continue;
+
+                string id = card.data.id ?? "";
+                if (!id.StartsWith("复制器", StringComparison.Ordinal))
+                    continue;
+
+                total += GetDuplicatorChanceByLevel(card.data.ItemLv);
+            }
+            return Mathf.Clamp01(total);
+        }
+
+        internal static void TryDuplicateRoomReward(string reward, Vector3? createPos, int? itemLv, string source)
+        {
+            try
+            {
+                if (!(Cfg_复制器_启用?.Value ?? true))
+                    return;
+
+                if (_creatingDuplicatedReward)
+                    return;
+
+                float chance = GetCurrentDuplicatorTriggerChance();
+                if (chance <= 0f)
+                    return;
+
+                if (string.IsNullOrEmpty(reward) || reward == "无")
+                    return;
+
+                if (!Game.获取一个固定随机数bool("复制器额外奖励_" + reward + "_" + source, chance))
+                    return;
+
+                Vector3? duplicatedCreatePos = createPos;
+                if (createPos != null)
+                {
+                    duplicatedCreatePos = createPos.Value + new Vector3(1.2f, 0f, 0.6f);
+                }
+
+                _creatingDuplicatedReward = true;
+                UniTaskUtils.Split(async () =>
+                {
+                    try
+                    {
+                        await WavesManager.CreateReward(reward, duplicatedCreatePos, false, itemLv);
+                    }
+                    finally
+                    {
+                        _creatingDuplicatedReward = false;
+                    }
+                }).Forget();
+                Log.LogInfo("[Cinderia_Mod_Item_Legacy] 复制器触发，额外复制房间奖励: source=" + source + ", reward=" + reward + ", itemLv=" + (itemLv?.ToString() ?? "null") + ", chance=" + chance.ToString("0.###") + ", pos=" + (duplicatedCreatePos?.ToString() ?? "null"));
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("[Cinderia_Mod_Item_Legacy] TryDuplicateRoomReward error: " + ex);
+            }
         }
 
         private static string ToPercentText(float rate)
@@ -415,6 +638,38 @@ namespace Cinderia_Mod_Item_Legacy
                 Log.LogError("[Cinderia_Mod_Item_Legacy] TryDropPendingItem error: " + ex);
             }
         }
+
+        internal static void DropHighestDuplicatorForTest(Vector3 position, string source)
+        {
+            try
+            {
+                if (!(Cfg_复制器_启用?.Value ?? true))
+                    return;
+
+                string duplicatorId = GetDuplicatorItemId(4);
+                MagicCardData data = MagicCard_Manager.id找data(duplicatorId);
+                if (data == null)
+                {
+                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] Highest duplicator not found: " + duplicatorId);
+                    return;
+                }
+
+                GameObject go = Game.实例化预制体("道具", position);
+                道具 drop = go != null ? go.GetComponent<道具>() : null;
+                if (drop == null)
+                {
+                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] Failed to spawn highest duplicator test drop.");
+                    return;
+                }
+
+                drop.Init(data, null, null, true);
+                Log.LogInfo("[Cinderia_Mod_Item_Legacy] Test drop highest duplicator. source=" + source + ", id=" + duplicatorId);
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("[Cinderia_Mod_Item_Legacy] DropHighestDuplicatorForTest error: " + ex);
+            }
+        }
     }
 
     // 每局结束：记录“当前最高等级道具（同级取第一个）”
@@ -446,6 +701,19 @@ namespace Cinderia_Mod_Item_Legacy
             Vector3 pos = __instance != null ? __instance.transform.position : Vector3.zero;
 
             Cinderia_Mod_Item_Legacy.TryDropPendingItem(pos, "NPC.垃圾屋随机道具.Postfix");
+            Cinderia_Mod_Item_Legacy.DropHighestDuplicatorForTest(pos, "NPC.垃圾屋随机道具.Postfix");
+        }
+    }
+
+    [HarmonyPatch(typeof(WavesManager), "CreateReward")]
+    internal static class Patch_Duplicator_OnCreateReward
+    {
+        private static void Postfix(string reward, Vector3? createPos, bool openDoorAfterPick, int? itemLv)
+        {
+            if (openDoorAfterPick)
+                return;
+
+            Cinderia_Mod_Item_Legacy.TryDuplicateRoomReward(reward, createPos, itemLv, "WavesManager.CreateReward");
         }
     }
 
