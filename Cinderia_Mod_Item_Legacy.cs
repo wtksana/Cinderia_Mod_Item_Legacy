@@ -44,6 +44,9 @@ namespace Cinderia_Mod_Item_Legacy
         private static ConfigEntry<float> Cfg_复制器_紫概率;
         private static ConfigEntry<float> Cfg_复制器_橙概率;
 
+        // ===== 自选开箱配置（BepInEx cfg） =====
+        private static ConfigEntry<bool> Cfg_自选开箱_启用;
+
         // ===== 额外掉落记录道具配置（BepInEx cfg） =====
         private static ConfigEntry<bool> Cfg_额外掉落记录道具_启用;
         private static ConfigEntry<string> Cfg_额外掉落记录道具_ID;
@@ -224,14 +227,33 @@ namespace Cinderia_Mod_Item_Legacy
             Cfg_复制器_紫概率 = Config.Bind(duplicatorSection, "紫概率", 0.60f, "拥有紫色复制器时，房间奖励额外复制一份的概率（0~1）");
             Cfg_复制器_橙概率 = Config.Bind(duplicatorSection, "橙概率", 0.80f, "拥有橙色复制器时，房间奖励额外复制一份的概率（0~1）");
 
+            const string chestSelectionSection = "ChestSelection";
+            Cfg_自选开箱_启用 = Config.Bind(chestSelectionSection, "启用", true, "是否启用‘宝箱随机品质后，自选该品质候选道具’功能");
+
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] Config loaded. trigger="
                 + Cfg_TreasureMap4_战斗结算触发概率.Value.ToString("0.###")
                 + ", small=" + Cfg_TreasureMap4_小宝箱最终概率.Value.ToString("0.###")
                 + ", middle=" + Cfg_TreasureMap4_中宝箱最终概率.Value.ToString("0.###")
                 + ", big=" + Cfg_TreasureMap4_大宝箱最终概率.Value.ToString("0.###")
                 + ", duplicatorEnabled=" + Cfg_复制器_启用.Value
+                + ", chestSelectionEnabled=" + Cfg_自选开箱_启用.Value
                 + ", legacyDropEnabled=" + Cfg_额外掉落记录道具_启用.Value
                 + ", pendingItem=" + (Cfg_额外掉落记录道具_ID.Value ?? ""));
+        }
+
+        internal static bool 是否启用自选开箱()
+        {
+            return Cfg_自选开箱_启用?.Value ?? true;
+        }
+
+        internal static bool 是否为自定义开箱候选道具(MagicCardData data)
+        {
+            if (data == null || string.IsNullOrEmpty(data.id))
+            {
+                return false;
+            }
+
+            return data.id.StartsWith("复制器", StringComparison.Ordinal);
         }
 
         internal static void DumpAllItemsToFile()

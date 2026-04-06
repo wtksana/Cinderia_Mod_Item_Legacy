@@ -39,6 +39,10 @@
       <HintPath>..\Cinderia_Data\Managed\Assembly-CSharp.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>..\Cinderia_Data\Managed\Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="BepInEx.Core">
       <HintPath>..\BepInEx\core\BepInEx.Core.dll</HintPath>
       <Private>False</Private>
@@ -63,8 +67,16 @@
       <HintPath>..\Cinderia_Data\Managed\Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Mirror">
+      <HintPath>..\Cinderia_Data\Managed\Mirror.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UniTask">
       <HintPath>..\Cinderia_Data\Managed\UniTask.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="netstandard">
+      <HintPath>..\Cinderia_Data\Managed\netstandard.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System" />
@@ -79,6 +91,14 @@
       <HintPath>..\Cinderia_Data\Managed\Sirenix.Serialization.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="spine-csharp">
+      <HintPath>..\Cinderia_Data\Managed\spine-csharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="spine-unity">
+      <HintPath>..\Cinderia_Data\Managed\spine-unity.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine">
       <HintPath>..\Cinderia_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
@@ -91,13 +111,22 @@
       <HintPath>..\Cinderia_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>..\Cinderia_Data\Managed\UnityEngine.ParticleSystemModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.TextRenderingModule">
       <HintPath>..\Cinderia_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="FMODUnity">
+      <HintPath>..\Cinderia_Data\Managed\FMODUnity.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Cinderia_Mod_Item_Legacy.cs" />
+    <Compile Include="ChestRewardSelection.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
