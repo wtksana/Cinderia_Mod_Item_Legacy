@@ -219,10 +219,10 @@ namespace Cinderia_Mod_Item_Legacy
 
             const string duplicatorSection = "Duplicator";
             Cfg_复制器_启用 = Config.Bind(duplicatorSection, "启用", true, "是否注入新增道具“复制器”");
-            Cfg_复制器_绿概率 = Config.Bind(duplicatorSection, "绿概率", 0.30f, "拥有绿色复制器时，房间奖励额外复制一份的概率（0~1）");
-            Cfg_复制器_蓝概率 = Config.Bind(duplicatorSection, "蓝概率", 0.50f, "拥有蓝色复制器时，房间奖励额外复制一份的概率（0~1）");
-            Cfg_复制器_紫概率 = Config.Bind(duplicatorSection, "紫概率", 0.70f, "拥有紫色复制器时，房间奖励额外复制一份的概率（0~1）");
-            Cfg_复制器_橙概率 = Config.Bind(duplicatorSection, "橙概率", 0.90f, "拥有橙色复制器时，房间奖励额外复制一份的概率（0~1）");
+            Cfg_复制器_绿概率 = Config.Bind(duplicatorSection, "绿概率", 0.20f, "拥有绿色复制器时，房间奖励额外复制一份的概率（0~1）");
+            Cfg_复制器_蓝概率 = Config.Bind(duplicatorSection, "蓝概率", 0.40f, "拥有蓝色复制器时，房间奖励额外复制一份的概率（0~1）");
+            Cfg_复制器_紫概率 = Config.Bind(duplicatorSection, "紫概率", 0.60f, "拥有紫色复制器时，房间奖励额外复制一份的概率（0~1）");
+            Cfg_复制器_橙概率 = Config.Bind(duplicatorSection, "橙概率", 0.80f, "拥有橙色复制器时，房间奖励额外复制一份的概率（0~1）");
 
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] Config loaded. trigger="
                 + Cfg_TreasureMap4_战斗结算触发概率.Value.ToString("0.###")
