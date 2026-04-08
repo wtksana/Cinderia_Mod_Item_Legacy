@@ -9,9 +9,11 @@ using Rogue;
 using Rogue.Items;
 using Rogue.NPCs;
 using Rogue.Units;
+using Rogue.Buffs.Trigger;
 using System;
 using System.IO;
 using System.Linq;
+using UI;
 using UnityEngine;
 using MagicCardData = Rogue.Data.MagicCard;
 using RuntimeMagicCard = Rogue.MagicCard;
@@ -22,6 +24,10 @@ namespace Cinderia_Mod_Item_Legacy
     public class Cinderia_Mod_Item_Legacy : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
+        private static readonly AccessTools.FieldRef<Trigger, int> Trigger_触发次数字段 =
+            AccessTools.FieldRefAccess<Trigger, int>("triggerCount");
+        private static readonly AccessTools.FieldRef<Game, Rogue.Map> Game_当前地图字段 =
+            AccessTools.FieldRefAccess<Game, Rogue.Map>("map");
 
         private Harmony _harmony;
         private static ConfigFile _configFile;
@@ -124,81 +130,18 @@ namespace Cinderia_Mod_Item_Legacy
                     return;
                 }
 
-                // 2) 改藏宝图四触发与子概率
-                Rogue.Data.Buff buff藏宝图四 = Game.Inst.excel.buffs.FirstOrDefault(b => b != null && b.id == "藏宝图四");
-
-                if (buff藏宝图四 != null)
-                {
-                    float triggerChance = Mathf.Clamp01(Cfg_TreasureMap4_战斗结算触发概率?.Value ?? 1f);
-                    float finalSmallTarget = Mathf.Max(0f, Cfg_TreasureMap4_小宝箱最终概率?.Value ?? 0.50f);
-                    float finalMidTarget = Mathf.Max(0f, Cfg_TreasureMap4_中宝箱最终概率?.Value ?? 0.35f);
-                    float finalBigTarget = Mathf.Max(0f, Cfg_TreasureMap4_大宝箱最终概率?.Value ?? 0.15f);
-
-                    float oldTriggerChance = buff藏宝图四.triggerChance;
-                    buff藏宝图四.triggerChance = triggerChance;
-                    Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] triggerChance: " + oldTriggerChance + " -> " + buff藏宝图四.triggerChance);
-
-                    // 这个 buff 是通过 skill 字段触发具体“刷宝箱标记”逻辑
-                    if (!string.IsNullOrEmpty(buff藏宝图四.skill) && Game.Inst.excel.skills != null)
-                    {
-                        Rogue.Data.Skill skill藏宝图四 = Game.Inst.excel.skills.FirstOrDefault(s => s != null && s.id == buff藏宝图四.skill);
-                        if (skill藏宝图四 != null)
-                        {
-                            // 继续深入查看子技能（真正分小/中/大宝箱概率很可能在子技能里）
-                            if (skill藏宝图四.son != null)
-                            {
-                                foreach (string childSkillId in skill藏宝图四.son)
-                                {
-                                    Rogue.Data.Skill childSkill = Game.Inst.excel.skills.FirstOrDefault(s => s != null && s.id == childSkillId);
-                                    if (childSkill == null)
-                                    {
-                                        Log.LogWarning("[Cinderia_Mod_Item_Legacy] Child skill not found: " + childSkillId);
-                                        continue;
-                                    }
-
-                                    if (childSkill.sonChance != null && childSkill.sonChance.Length >= 3)
-                                    {
-                                        float[] oldChild = childSkill.sonChance.ToArray();
-                                        float[] solvedSonChance = SolveTreasureMapSonChance(
-                                            triggerChance,
-                                            finalSmallTarget,
-                                            finalMidTarget,
-                                            finalBigTarget);
-
-                                        childSkill.sonChance[0] = solvedSonChance[0];
-                                        childSkill.sonChance[1] = solvedSonChance[1];
-                                        childSkill.sonChance[2] = solvedSonChance[2];
-                                        Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] child sonChance changed: ["
-                                            + string.Join(", ", oldChild.Select(v => v.ToString("0.###")))
-                                            + "] -> ["
-                                            + string.Join(", ", childSkill.sonChance.Select(v => v.ToString("0.###")))
-                                            + "]");
-
-                                        float finalSmall = triggerChance * childSkill.sonChance[0];
-                                        float finalMid = triggerChance * (1f - childSkill.sonChance[0]) * childSkill.sonChance[1];
-                                        float finalBig = triggerChance * (1f - childSkill.sonChance[0]) * (1f - childSkill.sonChance[1]) * childSkill.sonChance[2];
-                                        Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] final rates => 小:"
-                                            + finalSmall.ToString("0.###")
-                                            + ", 中:" + finalMid.ToString("0.###")
-                                            + ", 大:" + finalBig.ToString("0.###")
-                                            + ", 总:" + (finalSmall + finalMid + finalBig).ToString("0.###"));
-
-                                        map4.introduce = BuildTreasureMap4Introduce(finalSmall, finalMid, finalBig);
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            Log.LogWarning("[Cinderia_Mod_Item_Legacy] Skill not found: " + buff藏宝图四.skill);
-                        }
-                    }
-                }
-                else
-                {
-                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] Buff not found: 藏宝图四");
-                }
+                float finalSmall;
+                float finalMid;
+                float finalBig;
+                float noReward;
+                GetTreasureMap4ConfiguredRates(out finalSmall, out finalMid, out finalBig, out noReward);
+                map4.introduce = BuildTreasureMap4Introduce(finalSmall, finalMid, finalBig);
                 Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图4] 新描述: " + (map4.introduce ?? ""));
+                Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] 当前配置 => 小:"
+                    + finalSmall.ToString("0.###")
+                    + ", 中:" + finalMid.ToString("0.###")
+                    + ", 大:" + finalBig.ToString("0.###")
+                    + ", 空:" + noReward.ToString("0.###"));
 
                 _treasureMap4TweakedThisSession = true;
             }
@@ -254,6 +197,155 @@ namespace Cinderia_Mod_Item_Legacy
             }
 
             return data.id.StartsWith("复制器", StringComparison.Ordinal);
+        }
+
+        internal static bool TryHandleTreasureMap4BattleClearReward(Trigger trigger)
+        {
+            if (trigger?.buff?.data == null || trigger.buff.data.id != "藏宝图四")
+            {
+                return false;
+            }
+
+            try
+            {
+                if (!CanProcessTreasureMap4Reward(trigger))
+                {
+                    return true;
+                }
+                trigger.设置cd();
+                Trigger_触发次数字段(trigger)++;
+                trigger.buff.道具亮一下(true);
+
+                string rewardPrefab = ResolveTreasureMap4RewardPrefab();
+                if (string.IsNullOrEmpty(rewardPrefab))
+                {
+                    Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] 本次清场未生成海盗宝箱。");
+                    return true;
+                }
+
+                Vector3 createPos = GetTreasureMap4ChestCreatePos();
+                GameObject rewardObject = Game.实例化预制体(rewardPrefab, createPos);
+                if (rewardObject == null)
+                {
+                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] [藏宝图四] 生成海盗宝箱失败，预制体不存在: " + rewardPrefab);
+                    return true;
+                }
+
+                Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] 直接生成海盗宝箱: " + rewardPrefab + " @ " + createPos);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("[Cinderia_Mod_Item_Legacy] [藏宝图四] 直接生成海盗宝箱异常: " + ex);
+                return false;
+            }
+        }
+
+        private static bool CanProcessTreasureMap4Reward(Trigger trigger)
+        {
+            if (trigger.skill == null || trigger.cooldown > 0f || trigger.skill.封印 || UI_对话气泡.对话中)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static string ResolveTreasureMap4RewardPrefab()
+        {
+            const string noReward = "__NoReward__";
+            float finalSmall;
+            float finalMid;
+            float finalBig;
+            float noRewardWeight;
+            GetTreasureMap4ConfiguredRates(out finalSmall, out finalMid, out finalBig, out noRewardWeight);
+            string result = RandomUtils.PseudoRandom(
+                "藏宝图四清场宝箱",
+                true,
+                new ValueTuple<string, float>[]
+                {
+                    new ValueTuple<string, float>("海盗宝箱小", finalSmall),
+                    new ValueTuple<string, float>("海盗宝箱中", finalMid),
+                    new ValueTuple<string, float>("海盗宝箱大", finalBig),
+                    new ValueTuple<string, float>(noReward, noRewardWeight)
+                });
+            return result == noReward ? null : result;
+        }
+
+        private static Vector3 GetTreasureMap4ChestCreatePos()
+        {
+            Vector3 anchorPos = GetTreasureMap4RewardAnchorPos();
+            Vector2 randomCircle = UnityEngine.Random.insideUnitCircle;
+            if (randomCircle.sqrMagnitude < 0.01f)
+            {
+                randomCircle = Vector2.right;
+            }
+
+            float offsetDistance = UnityEngine.Random.Range(1.0f, 1.5f);
+            Vector3 offset = new Vector3(randomCircle.x, 0f, randomCircle.y).normalized * offsetDistance;
+            return MapUtils.ClampToNavMesh(anchorPos + offset, false);
+        }
+
+        private static Vector3 GetTreasureMap4RewardAnchorPos()
+        {
+            Vector3[] 已有奖励位置 = 可拾取物.所有可拾取物
+                .Where(t => t != null && t.gameObject != null && t.gameObject.activeInHierarchy)
+                .Select(t => t.transform.position)
+                .ToArray();
+            if (已有奖励位置.Length > 0)
+            {
+                Vector3 默认落点 = GetTreasureMap4DefaultDropPoint();
+                return 已有奖励位置
+                    .OrderBy(pos => Vector3.Distance(pos, 默认落点))
+                    .First();
+            }
+
+            return GetTreasureMap4DefaultDropPoint();
+        }
+
+        private static Vector3 GetTreasureMap4DefaultDropPoint()
+        {
+            Rogue.Map 当前地图 = Game.Inst != null ? Game_当前地图字段(Game.Inst) : null;
+            if (当前地图?.transform == null)
+            {
+                return Character.Inst != null ? Character.Inst.transform.position : Vector3.zero;
+            }
+
+            Transform points = 当前地图.transform.Find("掉落点");
+            if (points == null || points.childCount == 0)
+            {
+                return Character.Inst != null ? Character.Inst.transform.position : Vector3.zero;
+            }
+
+            Rogue.Units.Unit 助战 = Game.Inst.units.Units.FirstOrDefault(t => t.data.id == "友谊赛小黄");
+            Transform bestPoint = Enumerable.Range(0, points.childCount)
+                .Select(points.GetChild)
+                .Where(t => 助战 == null || Vector3.Distance(助战, t.position) > 3f)
+                .OrderBy(t => Character.Inst != null ? Vector3.Distance(t.position, Character.Inst) : 0f)
+                .FirstOrDefault();
+
+            return bestPoint != null
+                ? bestPoint.position
+                : (Character.Inst != null ? Character.Inst.transform.position : Vector3.zero);
+        }
+
+        private static void GetTreasureMap4ConfiguredRates(out float finalSmall, out float finalMid, out float finalBig, out float noReward)
+        {
+            float triggerChance = Mathf.Clamp01(Cfg_TreasureMap4_战斗结算触发概率?.Value ?? 1f);
+            finalSmall = Mathf.Max(0f, Cfg_TreasureMap4_小宝箱最终概率?.Value ?? 0.50f);
+            finalMid = Mathf.Max(0f, Cfg_TreasureMap4_中宝箱最终概率?.Value ?? 0.35f);
+            finalBig = Mathf.Max(0f, Cfg_TreasureMap4_大宝箱最终概率?.Value ?? 0.15f);
+            float total = finalSmall + finalMid + finalBig;
+
+            if (total > triggerChance && total > 0f)
+            {
+                float scale = triggerChance / total;
+                finalSmall *= scale;
+                finalMid *= scale;
+                finalBig *= scale;
+            }
+
+            noReward = Mathf.Max(0f, 1f - (finalSmall + finalMid + finalBig));
         }
 
         internal static void DumpAllItemsToFile()
@@ -364,6 +456,10 @@ namespace Cinderia_Mod_Item_Legacy
                 UpdateDuplicatorItemDescriptions(list);
 
                 Game.Inst.excel.magicCards = list.ToArray();
+                if (MagicCard_Manager.Inst != null)
+                {
+                    MagicCard_Manager.Inst.重置剩余魔卡卡池();
+                }
                 if (addedAny)
                 {
                     Log.LogInfo("[Cinderia_Mod_Item_Legacy] 已注入复制器道具 4 个等级版本（绿~橙）");
@@ -417,40 +513,6 @@ namespace Cinderia_Mod_Item_Legacy
             {
                 return "{\"jsonError\":\"" + (ex.Message ?? "unknown") + "\"}";
             }
-        }
-
-        private static float[] SolveTreasureMapSonChance(float triggerChance, float finalSmall, float finalMid, float finalBig)
-        {
-            float t = Mathf.Clamp01(triggerChance);
-            float fs = Mathf.Max(0f, finalSmall);
-            float fm = Mathf.Max(0f, finalMid);
-            float fb = Mathf.Max(0f, finalBig);
-
-            if (t <= 0f)
-            {
-                Log.LogWarning("[Cinderia_Mod_Item_Legacy] triggerChance <= 0，无法命中任何宝箱概率，sonChance将置0。");
-                return new[] { 0f, 0f, 0f };
-            }
-
-            float total = fs + fm + fb;
-            if (total > t)
-            {
-                float scale = t / total;
-                fs *= scale;
-                fm *= scale;
-                fb *= scale;
-                Log.LogWarning("[Cinderia_Mod_Item_Legacy] 目标最终概率之和超过triggerChance，已按比例缩放。scale=" + scale.ToString("0.###"));
-            }
-
-            float s0 = Mathf.Clamp01(fs / t);
-
-            float remainAfterS0 = Mathf.Max(0f, t - fs);
-            float s1 = remainAfterS0 > 1e-6f ? Mathf.Clamp01(fm / remainAfterS0) : 0f;
-
-            float remainAfterS1 = Mathf.Max(0f, remainAfterS0 - fm);
-            float s2 = remainAfterS1 > 1e-6f ? Mathf.Clamp01(fb / remainAfterS1) : 0f;
-
-            return new[] { s0, s1, s2 };
         }
 
         private static string BuildTreasureMap4Introduce(float finalSmall, float finalMid, float finalBig)
@@ -736,6 +798,21 @@ namespace Cinderia_Mod_Item_Legacy
                 return;
 
             Cinderia_Mod_Item_Legacy.TryDuplicateRoomReward(reward, createPos, itemLv, "WavesManager.CreateReward");
+        }
+    }
+
+    [HarmonyPatch(typeof(战斗结算时), "清场时")]
+    internal static class Patch_TreasureMap4_BattleClearReward
+    {
+        private static bool Prefix(战斗结算时 __instance)
+        {
+            if (__instance?.buff?.data == null || __instance.buff.data.id != "藏宝图四")
+            {
+                return true;
+            }
+
+            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMap4BattleClearReward(__instance);
+            return !handled;
         }
     }
 

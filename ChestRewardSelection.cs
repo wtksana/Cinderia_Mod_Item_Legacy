@@ -306,11 +306,11 @@ namespace Cinderia_Mod_Item_Legacy
                 .Where(c => 品质等级 == -1 || c.ItemLv == 品质等级)
                 .ToList();
 
-            候选道具.AddRange(获取额外自定义候选道具(品质等级, 候选道具));
+            候选道具.AddRange(获取额外补充候选道具(品质等级, 可获取魔卡卡池, 候选道具));
             return 候选道具;
         }
 
-        private static List<DataMagicCard> 获取额外自定义候选道具(int 品质等级, List<DataMagicCard> 已有候选)
+        private static List<DataMagicCard> 获取额外补充候选道具(int 品质等级, List<DataMagicCard> 原始可获取魔卡卡池, List<DataMagicCard> 已有候选)
         {
             if (Game.Inst?.excel?.magicCards == null || MagicCard_Manager.Inst == null)
             {
@@ -322,6 +322,11 @@ namespace Cinderia_Mod_Item_Legacy
                 (已有候选 ?? new List<DataMagicCard>())
                 .Where(c => c != null && !string.IsNullOrEmpty(c.id))
                 .Select(c => c.id));
+
+            HashSet<string> 原始可用基础Id = new HashSet<string>(
+                (原始可获取魔卡卡池 ?? new List<DataMagicCard>())
+                .Where(c => c != null && c.kind == "道具" && !string.IsNullOrEmpty(c.id))
+                .Select(c => 提取基础道具Id(c.id)));
 
             List<DataMagicCard> 已拾取及已展示道具 = 管理器.已拾取魔卡
                 .Where(card => card != null && card.data != null)
@@ -342,11 +347,14 @@ namespace Cinderia_Mod_Item_Legacy
                 .Where(group => !string.IsNullOrEmpty(group)));
 
             return Game.Inst.excel.magicCards
-                .Where(c => c != null && c.kind == "道具" && Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c))
+                .Where(c => c != null && c.kind == "道具")
+                .Where(c =>
+                    Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c)
+                    || 原始可用基础Id.Contains(提取基础道具Id(c.id)))
                 .Where(c => !已有候选Id.Contains(c.id))
                 .Where(c => c.color.IsNullOrEmpty() || c.color == Game.Inst.Character.data.id)
                 .Where(c => 品质等级 == -1 || c.ItemLv == 品质等级)
-                .Where(c => !已拾取基础名.Contains(提取基础道具Id(c.id)))
+                .Where(c => Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c) || !已拾取基础名.Contains(提取基础道具Id(c.id)))
                 .Where(c => !存在互斥组冲突(c, 已拾取组))
                 .Where(c => 满足前置条件(c, 已拾取组))
                 .ToList();
