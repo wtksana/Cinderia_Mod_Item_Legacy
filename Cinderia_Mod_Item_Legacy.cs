@@ -408,6 +408,8 @@ namespace Cinderia_Mod_Item_Legacy
                 if (excel == null || excel.magicCards == null)
                     return;
 
+                EnsureDuplicatorSlotBuffs(excel);
+
                 MagicCardData template = excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
                 if (template == null)
                 {
@@ -431,7 +433,7 @@ namespace Cinderia_Mod_Item_Legacy
                         existing.strength = 0;
                         existing.agility = 0;
                         existing.intelligence = 0;
-                        existing.buffs = Array.Empty<string>();
+                        existing.buffs = new[] { GetDuplicatorSlotBuffId(lv) };
                         existing.skills = Array.Empty<string>();
                         continue;
                     }
@@ -454,7 +456,7 @@ namespace Cinderia_Mod_Item_Legacy
                     item.strength = 0;
                     item.agility = 0;
                     item.intelligence = 0;
-                    item.buffs = Array.Empty<string>();
+                    item.buffs = new[] { GetDuplicatorSlotBuffId(lv) };
                     item.skills = Array.Empty<string>();
                     item.keyward = Array.Empty<string>();
                     item.groups = Array.Empty<string>();
@@ -501,6 +503,7 @@ namespace Cinderia_Mod_Item_Legacy
                 item.strength = 0;
                 item.agility = 0;
                 item.intelligence = 0;
+                item.buffs = new[] { GetDuplicatorSlotBuffId(lv) };
             }
         }
 
@@ -543,12 +546,86 @@ namespace Cinderia_Mod_Item_Legacy
         private static string BuildDuplicatorIntroduce(int level)
         {
             float chance = GetDuplicatorChanceByLevel(level);
-            return "清空房间掉落奖励时：有" + ToPercentText(chance) + "几率额外掉落一份相同的房间奖励。";
+            return "清空房间掉落奖励时：有" + ToPercentText(chance) + "几率额外掉落一份相同的房间奖励。\n"
+                + "装备：获得" + level + "个额外的道具格。";
         }
 
         private static string GetDuplicatorItemId(int level)
         {
             return "复制器" + level;
+        }
+
+        private static string GetDuplicatorSlotBuffId(int level)
+        {
+            switch (level)
+            {
+                case 1: return "宽松的腰带加格子一";
+                case 2: return "宽松的腰带加格子二";
+                case 3: return "宽松的腰带加格子三";
+                case 4: return "宽松的腰带加格子四";
+                default: return "宽松的腰带加格子一";
+            }
+        }
+
+        private static void EnsureDuplicatorSlotBuffs(ExcelData excel)
+        {
+            if (excel?.buffs == null)
+            {
+                return;
+            }
+
+            var list = excel.buffs.ToList();
+            Rogue.Data.Buff template = list.FirstOrDefault(b =>
+                b != null && (
+                    b.id == "宽松的腰带加格子二"
+                    || b.id == "宽松的腰带加格子三"
+                    || b.id == "宽松的腰带加格子四"));
+            if (template == null)
+            {
+                Log.LogWarning("[Cinderia_Mod_Item_Legacy] 无法补全复制器额外道具格 buff，缺少宽松的腰带模板 buff。");
+                return;
+            }
+
+            bool changed = false;
+            for (int level = 1; level <= 4; level++)
+            {
+                string buffId = GetDuplicatorSlotBuffId(level);
+                Rogue.Data.Buff existing = list.FirstOrDefault(b => b != null && b.id == buffId);
+                if (existing != null)
+                {
+                    existing.script = "加道具栏格子";
+                    existing.scriptData = level.ToString();
+                    existing.description = "装备：获得" + level + "个额外的道具格。";
+                    existing.name = buffId;
+                    continue;
+                }
+
+                Rogue.Data.Buff buff = new Rogue.Data.Buff();
+                template.CopyTo(buff);
+                buff.id = buffId;
+                buff.name = buffId;
+                buff.description = "装备：获得" + level + "个额外的道具格。";
+                buff.script = "加道具栏格子";
+                buff.scriptData = level.ToString();
+                buff.skill = "";
+                buff.changeBuff = "";
+                buff.trigger = "";
+                buff.triggerData = "";
+                buff.triggerChance = 0f;
+                buff.triggerCD = "";
+                buff.triggerDelay = 0f;
+                buff.duration = 0f;
+                buff.sons = Array.Empty<string>();
+                buff.有这个就不生效 = Array.Empty<string>();
+                buff.keyword = Array.Empty<string>();
+                list.Add(buff);
+                changed = true;
+            }
+
+            if (changed)
+            {
+                excel.buffs = list.ToArray();
+            }
         }
 
         private static float GetDuplicatorChanceByLevel(int level)
