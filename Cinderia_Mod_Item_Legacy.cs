@@ -12,8 +12,9 @@ using Rogue.Units;
 using Rogue.Buffs.Trigger;
 using Rogue.Data;
 using System;
-using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
 using UI;
 using UnityEngine;
 using MagicCardData = Rogue.Data.MagicCard;
@@ -29,13 +30,34 @@ namespace Cinderia_Mod_Item_Legacy
             AccessTools.FieldRefAccess<Trigger, int>("triggerCount");
         private static readonly AccessTools.FieldRef<Game, Rogue.Map> Game_当前地图字段 =
             AccessTools.FieldRefAccess<Game, Rogue.Map>("map");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, bool> UI左侧道具栏_初始化完成字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, bool>("初始化完成");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, bool> UI左侧道具栏_减少一个槽中字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, bool>("减少一个槽中");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, bool> UI左侧道具栏_拖拽中字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, bool>("拖拽中");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, int> UI左侧道具栏_当前悬停index字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, int>("当前悬停index");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, int> UI左侧道具栏_拖拽者index字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, int>("拖拽者index");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, int> UI左侧道具栏_拖拽时最近index字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, int>("拖拽时最近index");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, int> UI左侧道具栏_上帧悬停index字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, int>("上帧悬停index");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, int> UI左侧道具栏_上帧拖拽时最近index字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, int>("上帧拖拽时最近index");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, float> UI左侧道具栏_已悬停时间字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, float>("已悬停时间");
+        private static readonly AccessTools.FieldRef<UI_左侧道具栏相关, int> UI左侧道具栏_手柄想换索引字段 =
+            AccessTools.FieldRefAccess<UI_左侧道具栏相关, int>("手柄想换索引");
+        private static readonly MethodInfo UI左侧道具栏_一个道具栏初始化方法 =
+            AccessTools.Method(typeof(UI_左侧道具栏相关), "一个道具栏初始化");
 
         private Harmony _harmony;
         private static ConfigFile _configFile;
         private static bool _creatingDuplicatedReward;
 
         private static bool _bonusGivenThisRun;
-        private static bool _itemDumpDoneThisSession;
         private static bool _treasureMap4TweakedThisSession;
 
         // ===== 藏宝图4配置（BepInEx cfg） =====
@@ -57,19 +79,6 @@ namespace Cinderia_Mod_Item_Legacy
         // ===== 额外掉落记录道具配置（BepInEx cfg） =====
         private static ConfigEntry<bool> Cfg_额外掉落记录道具_启用;
         private static ConfigEntry<string> Cfg_额外掉落记录道具_ID;
-
-        private static string ItemDumpFilePath
-        {
-            get
-            {
-                string modDir = Path.GetDirectoryName(typeof(Cinderia_Mod_Item_Legacy).Assembly.Location);
-                if (string.IsNullOrEmpty(modDir))
-                {
-                    modDir = Paths.PluginPath;
-                }
-                return Path.Combine(modDir, "Cinderia_Mod_Item_Legacy_AllItems.json");
-            }
-        }
 
         private static string PendingItemId
         {
@@ -118,7 +127,6 @@ namespace Cinderia_Mod_Item_Legacy
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] New run started. pendingItem=" + PendingItemId);
 
             EnsureCustomDuplicatorItems();
-            DumpAllItemsToFile();
             ApplyTreasureMap4Tweaks();
         }
 
@@ -363,40 +371,6 @@ namespace Cinderia_Mod_Item_Legacy
             noReward = Mathf.Max(0f, 1f - (finalSmall + finalMid + finalBig));
         }
 
-        internal static void DumpAllItemsToFile()
-        {
-            try
-            {
-                if (_itemDumpDoneThisSession)
-                {
-                    return;
-                }
-
-                ExcelData excel = 获取Excel数据();
-                if (excel == null || excel.magicCards == null)
-                {
-                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] DumpAllItemsToFile skipped, excel not ready.");
-                    return;
-                }
-
-                MagicCardData[] allCards = excel.magicCards;
-                MagicCardData[] items = allCards
-                    .Where(c => c != null && c.kind == "道具")
-                    .OrderBy(c => c.ItemLv)
-                    .ThenBy(c => c.id)
-                    .ToArray();
-
-                File.WriteAllText(ItemDumpFilePath, ToJson(items));
-
-                _itemDumpDoneThisSession = true;
-                Log.LogInfo("[Cinderia_Mod_Item_Legacy] Item dump saved: " + ItemDumpFilePath + " (count=" + items.Length + ")");
-            }
-            catch (Exception ex)
-            {
-                Log.LogError("[Cinderia_Mod_Item_Legacy] DumpAllItemsToFile error: " + ex);
-            }
-        }
-
         internal static void EnsureCustomDuplicatorItems()
         {
             try
@@ -408,7 +382,8 @@ namespace Cinderia_Mod_Item_Legacy
                 if (excel == null || excel.magicCards == null)
                     return;
 
-                EnsureDuplicatorSlotBuffs(excel);
+                if (!EnsureCustomDuplicatorSlotBuffs(excel))
+                    return;
 
                 MagicCardData template = excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
                 if (template == null)
@@ -507,6 +482,48 @@ namespace Cinderia_Mod_Item_Legacy
             }
         }
 
+        private static bool EnsureCustomDuplicatorSlotBuffs(ExcelData excel)
+        {
+            if (excel?.buffs == null)
+            {
+                return false;
+            }
+
+            System.Collections.Generic.List<Rogue.Data.Buff> list = excel.buffs.ToList();
+            Rogue.Data.Buff template = list.FirstOrDefault(b => b != null && b.id == "宽松的腰带加格子二");
+            if (template == null)
+            {
+                Log.LogWarning("[Cinderia_Mod_Item_Legacy] 无法注入复制器加格子 Buff，缺少模板 Buff 宽松的腰带加格子二");
+                return false;
+            }
+
+            bool addedAny = false;
+            for (int lv = 1; lv <= 4; lv++)
+            {
+                string id = GetDuplicatorSlotBuffId(lv);
+                Rogue.Data.Buff buff = list.FirstOrDefault(b => b != null && b.id == id);
+                if (buff == null)
+                {
+                    buff = template.Clone();
+                    list.Add(buff);
+                    addedAny = true;
+                }
+
+                buff.id = id;
+                buff.name = "复制器加格子";
+                buff.description = "复制器提供" + lv + "个额外道具格。";
+                buff.script = template.script;
+                buff.scriptData = lv.ToString();
+            }
+
+            excel.buffs = list.ToArray();
+            if (addedAny)
+            {
+                Log.LogInfo("[Cinderia_Mod_Item_Legacy] 已注入复制器加格子 Buff 4 个等级版本");
+            }
+            return true;
+        }
+
         private static void RemoveDuplicatorItemIfExists(System.Collections.Generic.List<MagicCardData> list, int level)
         {
             string id = GetDuplicatorItemId(level);
@@ -559,73 +576,365 @@ namespace Cinderia_Mod_Item_Legacy
         {
             switch (level)
             {
-                case 1: return "宽松的腰带加格子一";
-                case 2: return "宽松的腰带加格子二";
-                case 3: return "宽松的腰带加格子三";
-                case 4: return "宽松的腰带加格子四";
-                default: return "宽松的腰带加格子一";
+                case 1: return "复制器加格子一";
+                case 2: return "复制器加格子二";
+                case 3: return "复制器加格子三";
+                case 4: return "复制器加格子四";
+                default: throw new ArgumentOutOfRangeException(nameof(level));
             }
         }
 
-        private static void EnsureDuplicatorSlotBuffs(ExcelData excel)
+        internal static bool 是否为复制器道具Id(string itemId)
         {
-            if (excel?.buffs == null)
+            return !string.IsNullOrEmpty(itemId) && itemId.StartsWith("复制器", StringComparison.Ordinal);
+        }
+
+        internal static void 延迟重应用复制器装备效果(string source, int waitFrames = 2)
+        {
+            if (!(Cfg_复制器_启用?.Value ?? true) || MagicCard_Manager.Inst?.已拾取魔卡 == null)
             {
                 return;
             }
 
-            var list = excel.buffs.ToList();
-            Rogue.Data.Buff template = list.FirstOrDefault(b =>
-                b != null && (
-                    b.id == "宽松的腰带加格子二"
-                    || b.id == "宽松的腰带加格子三"
-                    || b.id == "宽松的腰带加格子四"));
-            if (template == null)
+            UniTaskUtils.Split(async () =>
             {
-                Log.LogWarning("[Cinderia_Mod_Item_Legacy] 无法补全复制器额外道具格 buff，缺少宽松的腰带模板 buff。");
-                return;
-            }
-
-            bool changed = false;
-            for (int level = 1; level <= 4; level++)
-            {
-                string buffId = GetDuplicatorSlotBuffId(level);
-                Rogue.Data.Buff existing = list.FirstOrDefault(b => b != null && b.id == buffId);
-                if (existing != null)
+                int 剩余帧数 = Mathf.Max(1, waitFrames);
+                while (剩余帧数-- > 0)
                 {
-                    existing.script = "加道具栏格子";
-                    existing.scriptData = level.ToString();
-                    existing.description = "装备：获得" + level + "个额外的道具格。";
-                    existing.name = buffId;
-                    continue;
+                    await UniTask.NextFrame();
                 }
 
-                Rogue.Data.Buff buff = new Rogue.Data.Buff();
-                template.CopyTo(buff);
-                buff.id = buffId;
-                buff.name = buffId;
-                buff.description = "装备：获得" + level + "个额外的道具格。";
-                buff.script = "加道具栏格子";
-                buff.scriptData = level.ToString();
-                buff.skill = "";
-                buff.changeBuff = "";
-                buff.trigger = "";
-                buff.triggerData = "";
-                buff.triggerChance = 0f;
-                buff.triggerCD = "";
-                buff.triggerDelay = 0f;
-                buff.duration = 0f;
-                buff.sons = Array.Empty<string>();
-                buff.有这个就不生效 = Array.Empty<string>();
-                buff.keyword = Array.Empty<string>();
-                list.Add(buff);
-                changed = true;
+                重应用复制器装备效果(source);
+            }).Forget();
+        }
+
+        private static void 重应用复制器装备效果(string source)
+        {
+            try
+            {
+                if (!(Cfg_复制器_启用?.Value ?? true))
+                {
+                    return;
+                }
+
+                EnsureCustomDuplicatorItems();
+
+                if (MagicCard_Manager.Inst?.已拾取魔卡 == null)
+                {
+                    return;
+                }
+
+                bool hasDuplicator = MagicCard_Manager.Inst.已拾取魔卡
+                    .Any(card => card?.data != null && 是否为复制器道具Id(card.data.id));
+                if (!hasDuplicator)
+                {
+                    return;
+                }
+
+                恢复复制器额外格子();
+
+                UI_背包面板.Inst?.Refresh();
+                延迟同步左侧道具栏UI(source, 1, 20);
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("[Cinderia_Mod_Item_Legacy] 重应用复制器装备效果失败 source=" + source + " ex=" + ex);
+            }
+        }
+
+        private static void 恢复复制器额外格子()
+        {
+            MagicCard_Manager mgr = MagicCard_Manager.Inst;
+            if (mgr?.道具列表 == null)
+            {
+                return;
             }
 
-            if (changed)
+            int currentExtra = Mathf.Max(0, MagicCard_Manager.额外道具栏位);
+            int extraFromItemList = Mathf.Max(0, mgr.道具列表.Count - MagicCard_Manager.初始道具栏位);
+            int targetExtra = Mathf.Max(currentExtra, extraFromItemList);
+            if (targetExtra == currentExtra)
             {
-                excel.buffs = list.ToArray();
+                return;
             }
+
+            MagicCard_Manager.额外道具栏位 = targetExtra;
+        }
+
+        internal static void 延迟同步左侧道具栏UI(string source, int waitFrames = 1, int retryFrames = 20)
+        {
+            if (!(Cfg_复制器_启用?.Value ?? true))
+            {
+                return;
+            }
+
+            UniTaskUtils.Split(async () =>
+            {
+                int remaining = Mathf.Max(0, waitFrames);
+                while (remaining-- > 0)
+                {
+                    await UniTask.NextFrame();
+                }
+
+                int retries = Mathf.Max(1, retryFrames);
+                while (retries-- > 0)
+                {
+                    if (尝试同步左侧道具栏UI(source))
+                    {
+                        return;
+                    }
+
+                    await UniTask.NextFrame();
+                }
+            }).Forget();
+        }
+
+        private static bool 尝试同步左侧道具栏UI(string source)
+        {
+            try
+            {
+                if (!(Cfg_复制器_启用?.Value ?? true))
+                {
+                    return true;
+                }
+
+                UI_左侧道具栏相关 ui = UI_左侧道具栏相关.Inst;
+                MagicCard_Manager mgr = MagicCard_Manager.Inst;
+                if (ui == null || mgr == null || ui.m_道具栏 == null || ui.m_道具栏悬停框 == null)
+                {
+                    return false;
+                }
+
+                恢复复制器额外格子();
+                if (!UI左侧道具栏_初始化完成字段(ui) || UI左侧道具栏_减少一个槽中字段(ui))
+                {
+                    return false;
+                }
+
+                int target = Mathf.Max(0, MagicCard_Manager.道具栏位);
+                bool needRebuild = ui.m_道具栏.numItems != target
+                    || ui.m_道具栏悬停框.numItems != target
+                    || ui.所有背包 == null
+                    || ui.所有背包外发光 == null
+                    || ui.所有背包.Count != target
+                    || ui.所有背包外发光.Count != target;
+
+                System.Collections.Generic.List<UI_左侧道具悬停框> 旧悬停框列表 = ui.所有背包外发光 != null
+                    ? ui.所有背包外发光.ToList()
+                    : new System.Collections.Generic.List<UI_左侧道具悬停框>();
+
+                if (needRebuild)
+                {
+                    UI_主界面 主界面 = UI_主界面.Inst;
+                    if (主界面 != null)
+                    {
+                        foreach (UI_左侧道具悬停框 hover in 旧悬停框列表)
+                        {
+                            if (hover != null)
+                            {
+                                主界面.设置可以被手柄选择的按钮内是否存在(hover, 0, false, "左侧道具栏相关");
+                            }
+                        }
+                    }
+
+                    重置左侧道具栏交互状态(ui);
+                    ui.m_道具栏.RemoveChildrenToPool();
+                    ui.m_道具栏悬停框.RemoveChildrenToPool();
+
+                    for (int i = 0; i < target; i++)
+                    {
+                        ui.m_道具栏.AddItemFromPool();
+                        UI_左侧道具悬停框 hover = ui.m_道具栏悬停框.AddItemFromPool() as UI_左侧道具悬停框;
+                        初始化左侧道具栏悬停框(ui, hover, i);
+                    }
+
+                    ui.m_道具栏.ResizeToFit();
+                    ui.m_道具栏悬停框.ResizeToFit();
+                    ui.所有背包 = ui.m_道具栏.GetChildren().Select(t => t as UI_左侧道具).ToList();
+                    ui.所有背包外发光 = ui.m_道具栏悬停框.GetChildren().Select(t => t as UI_左侧道具悬停框).ToList();
+                }
+                else
+                {
+                    for (int i = 0; i < ui.所有背包外发光.Count; i++)
+                    {
+                        初始化左侧道具栏悬停框(ui, ui.所有背包外发光[i], i);
+                    }
+                }
+
+                UI_主界面 当前主界面 = UI_主界面.Inst;
+                if (当前主界面 != null)
+                {
+                    foreach (UI_左侧道具悬停框 hover in ui.所有背包外发光)
+                    {
+                        if (hover != null)
+                        {
+                            当前主界面.加入可以被手柄选择的按钮(hover, 0, "左侧道具栏相关");
+                        }
+                    }
+                }
+
+                ui.刷新左侧道具栏();
+                UI_背包面板.Inst?.Refresh();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.LogError("[Cinderia_Mod_Item_Legacy] 同步左侧道具栏UI失败 source=" + source + " ex=" + ex);
+                return false;
+            }
+        }
+
+        private static void 初始化左侧道具栏悬停框(UI_左侧道具栏相关 ui, UI_左侧道具悬停框 hover, int index)
+        {
+            if (ui == null || hover == null || UI左侧道具栏_一个道具栏初始化方法 == null)
+            {
+                return;
+            }
+
+            UI左侧道具栏_一个道具栏初始化方法.Invoke(ui, new object[] { hover, index });
+        }
+
+        private static void 重置左侧道具栏交互状态(UI_左侧道具栏相关 ui)
+        {
+            if (ui == null)
+            {
+                return;
+            }
+
+            UI左侧道具栏_拖拽中字段(ui) = false;
+            UI左侧道具栏_当前悬停index字段(ui) = -1;
+            UI左侧道具栏_拖拽者index字段(ui) = -1;
+            UI左侧道具栏_拖拽时最近index字段(ui) = -1;
+            UI左侧道具栏_上帧悬停index字段(ui) = -1;
+            UI左侧道具栏_上帧拖拽时最近index字段(ui) = -1;
+            UI左侧道具栏_已悬停时间字段(ui) = 0f;
+            UI左侧道具栏_手柄想换索引字段(ui) = -1;
+        }
+
+        internal static async UniTask 安全减少一个槽(UI_左侧道具栏相关 ui)
+        {
+            if (ui == null)
+            {
+                return;
+            }
+
+            bool 已设置减槽中 = false;
+            try
+            {
+                await UniTask.WaitUntil(() => ui == null || !UI左侧道具栏_减少一个槽中字段(ui), PlayerLoopTiming.Update, default(CancellationToken), false);
+                if (!左侧道具栏可安全改动(ui))
+                {
+                    return;
+                }
+
+                UI左侧道具栏_减少一个槽中字段(ui) = true;
+                已设置减槽中 = true;
+                if (!左侧道具栏可安全改动(ui))
+                {
+                    return;
+                }
+
+                MagicCard_Manager mgr = MagicCard_Manager.Inst;
+                if (mgr?.道具列表 == null || mgr.道具列表.Count == 0)
+                {
+                    return;
+                }
+
+                int removeIndex = MagicCard_Manager.道具栏位 - 1;
+                if (removeIndex < 0 || removeIndex >= mgr.道具列表.Count)
+                {
+                    return;
+                }
+
+                RuntimeMagicCard lastCard = mgr.道具列表.LastOrDefault();
+                if (mgr.项链 && lastCard == mgr.项链)
+                {
+                    int necklaceTargetIndex = Mathf.Max(0, UI_左侧道具栏相关.道具栏位 - 2);
+                    if (mgr.项链.index >= 0 && mgr.项链.index < mgr.道具列表.Count && necklaceTargetIndex < mgr.道具列表.Count)
+                    {
+                        UI_左侧道具栏相关.交换道具(mgr.项链.index, necklaceTargetIndex);
+                    }
+                    lastCard = mgr.道具列表.LastOrDefault();
+                }
+
+                if (lastCard != null)
+                {
+                    UI_左侧道具栏相关.丢道具(mgr.道具列表.Last());
+                }
+
+                if (!左侧道具栏可安全改动(ui))
+                {
+                    return;
+                }
+
+                if (ui.m_道具栏.numItems > removeIndex)
+                {
+                    ui.m_道具栏.RemoveChildrenToPool(removeIndex, removeIndex);
+                }
+                if (ui.m_道具栏悬停框.numItems > removeIndex)
+                {
+                    ui.m_道具栏悬停框.RemoveChildrenToPool(removeIndex, removeIndex);
+                }
+
+                ui.m_道具栏.ResizeToFit();
+                ui.m_道具栏悬停框.ResizeToFit();
+                ui.所有背包 = ui.m_道具栏.GetChildren().Select(t => t as UI_左侧道具).ToList();
+                ui.所有背包外发光 = ui.m_道具栏悬停框.GetChildren().Select(t => t as UI_左侧道具悬停框).ToList();
+
+                mgr = MagicCard_Manager.Inst;
+                removeIndex = MagicCard_Manager.道具栏位 - 1;
+                if (mgr?.道具列表 != null && removeIndex >= 0 && removeIndex < mgr.道具列表.Count)
+                {
+                    mgr.道具列表.RemoveAt(removeIndex);
+                }
+                MagicCard_Manager.额外道具栏位 = Mathf.Max(0, MagicCard_Manager.额外道具栏位 - 1);
+
+                if (左侧道具栏可安全改动(ui))
+                {
+                    ui.刷新左侧道具栏();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning("[Cinderia_Mod_Item_Legacy] 已拦截左侧道具栏减槽异常: " + ex.Message);
+            }
+            finally
+            {
+                if (ui != null && 已设置减槽中)
+                {
+                    UI左侧道具栏_减少一个槽中字段(ui) = false;
+                }
+            }
+        }
+
+        private static bool 左侧道具栏可安全改动(UI_左侧道具栏相关 ui)
+        {
+            if (ui == null || ui.isDisposed)
+            {
+                return false;
+            }
+
+            if (!UI左侧道具栏_初始化完成字段(ui))
+            {
+                return false;
+            }
+
+            if (UI_主界面.Inst == null || UI_主界面.Inst.isDisposed || Game.Inst == null || Game.Inst.UI == null)
+            {
+                return false;
+            }
+
+            if (ui.m_道具栏 == null || ui.m_道具栏.isDisposed || ui.m_道具栏悬停框 == null || ui.m_道具栏悬停框.isDisposed)
+            {
+                return false;
+            }
+
+            if (ui.displayObject == null || ui.m_道具栏.displayObject == null || ui.m_道具栏悬停框.displayObject == null)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private static float GetDuplicatorChanceByLevel(int level)
@@ -822,37 +1131,6 @@ namespace Cinderia_Mod_Item_Legacy
             }
         }
 
-        internal static void DropHighestDuplicatorForTest(Vector3 position, string source)
-        {
-            try
-            {
-                if (!(Cfg_复制器_启用?.Value ?? true))
-                    return;
-
-                string duplicatorId = GetDuplicatorItemId(4);
-                MagicCardData data = MagicCard_Manager.id找data(duplicatorId);
-                if (data == null)
-                {
-                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] Highest duplicator not found: " + duplicatorId);
-                    return;
-                }
-
-                GameObject go = Game.实例化预制体("道具", position);
-                道具 drop = go != null ? go.GetComponent<道具>() : null;
-                if (drop == null)
-                {
-                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] Failed to spawn highest duplicator test drop.");
-                    return;
-                }
-
-                drop.Init(data, null, null, true);
-                Log.LogInfo("[Cinderia_Mod_Item_Legacy] Test drop highest duplicator. source=" + source + ", id=" + duplicatorId);
-            }
-            catch (Exception ex)
-            {
-                Log.LogError("[Cinderia_Mod_Item_Legacy] DropHighestDuplicatorForTest error: " + ex);
-            }
-        }
     }
 
     // 每局结束：记录“当前最高等级道具（同级取第一个）”
@@ -865,13 +1143,58 @@ namespace Cinderia_Mod_Item_Legacy
         }
     }
 
-    // 新局开始：重置“本局是否已发奖励”标记
-    [HarmonyPatch(typeof(MagicCard_Manager), "加载英雄表")]
+    // 新局开始：重置“本局是否已发奖励”标记，并在角色创建流程结束后统一同步复制器额外槽位
+    [HarmonyPatch(typeof(Character), "角色创建时")]
     internal static class Patch_ResetPerRunState
     {
         private static void Postfix()
         {
             Cinderia_Mod_Item_Legacy.OnNewRunStarted();
+        }
+    }
+
+    [HarmonyPatch(typeof(Character), "角色出门时")]
+    internal static class Patch_DuplicatorReequip_OnLeaveHome
+    {
+        private static void Postfix()
+        {
+            Cinderia_Mod_Item_Legacy.延迟重应用复制器装备效果("Character.角色出门时.Postfix", 3);
+        }
+    }
+
+    [HarmonyPatch(typeof(Character), "加载存档字符串")]
+    internal static class Patch_DuplicatorReequip_OnLoadDeckString
+    {
+        private static void Postfix()
+        {
+            Cinderia_Mod_Item_Legacy.延迟重应用复制器装备效果("Character.加载存档字符串.Postfix", 3);
+        }
+    }
+
+    [HarmonyPatch(typeof(UI_左侧道具栏相关), "ConstructFromXML")]
+    internal static class Patch_LeftItemBar_Construct_Log
+    {
+        private static void Postfix()
+        {
+            MagicCard_Manager mgr = MagicCard_Manager.Inst;
+            bool hasDuplicator = mgr?.已拾取魔卡 != null
+                && mgr.已拾取魔卡.Any(card => card?.data != null && Cinderia_Mod_Item_Legacy.是否为复制器道具Id(card.data.id));
+            if (!hasDuplicator)
+            {
+                return;
+            }
+
+            Cinderia_Mod_Item_Legacy.延迟同步左侧道具栏UI("UI_左侧道具栏相关.ConstructFromXML", 6, 30);
+        }
+    }
+
+    [HarmonyPatch(typeof(UI_左侧道具栏相关), "_减少一个槽")]
+    internal static class Patch_LeftItemBar_SafeReduceSlot
+    {
+        private static bool Prefix(UI_左侧道具栏相关 __instance, ref UniTask __result)
+        {
+            __result = Cinderia_Mod_Item_Legacy.安全减少一个槽(__instance);
+            return false;
         }
     }
 
@@ -884,7 +1207,6 @@ namespace Cinderia_Mod_Item_Legacy
             Vector3 pos = __instance != null ? __instance.transform.position : Vector3.zero;
 
             Cinderia_Mod_Item_Legacy.TryDropPendingItem(pos, "NPC.垃圾屋随机道具.Postfix");
-            // Cinderia_Mod_Item_Legacy.DropHighestDuplicatorForTest(pos, "NPC.垃圾屋随机道具.Postfix");
         }
     }
 
