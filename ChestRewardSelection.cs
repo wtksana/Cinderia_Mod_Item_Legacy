@@ -490,6 +490,15 @@ namespace Cinderia_Mod_Item_Legacy
 
         internal static UniTask<DataMagicCard> 显示并等待选择(List<DataMagicCard> 候选道具, int 品质等级, string 宝箱名称)
         {
+            return 显示并等待选择(
+                候选道具,
+                string.Format("{0}：选择一个{1}道具", 宝箱名称, 获取稀有度文本(品质等级)),
+                "点击左侧条目即可领取，品质随机逻辑保持原版不变。",
+                品质等级);
+        }
+
+        internal static UniTask<DataMagicCard> 显示并等待选择(List<DataMagicCard> 候选道具, string 标题文本, string 提示文本, int 强调等级 = -1)
+        {
             if (候选道具 == null || 候选道具.Count == 0)
             {
                 return UniTask.FromResult<DataMagicCard>(null);
@@ -501,7 +510,7 @@ namespace Cinderia_Mod_Item_Legacy
             }
 
             ChestRewardSelectionOverlay overlay = 获取或创建实例();
-            return overlay.打开选择(候选道具, 品质等级, 宝箱名称);
+            return overlay.打开选择(候选道具, 标题文本, 提示文本, 强调等级);
         }
 
         private static ChestRewardSelectionOverlay 获取或创建实例()
@@ -517,7 +526,7 @@ namespace Cinderia_Mod_Item_Legacy
             return _instance;
         }
 
-        private UniTask<DataMagicCard> 打开选择(List<DataMagicCard> 候选道具, int 品质等级, string 宝箱名称)
+        private UniTask<DataMagicCard> 打开选择(List<DataMagicCard> 候选道具, string 标题文本, string 提示文本, int 强调等级)
         {
             if (_currentRequest != null)
             {
@@ -529,8 +538,9 @@ namespace Cinderia_Mod_Item_Legacy
             _currentRequest = new 选择请求
             {
                 候选道具 = 候选道具,
-                品质等级 = 品质等级,
-                宝箱名称 = 宝箱名称,
+                标题文本 = 标题文本,
+                提示文本 = 提示文本,
+                强调等级 = 强调等级,
                 完成源 = tcs,
                 预览索引 = 0,
                 滚动位置 = Vector2.zero,
@@ -584,15 +594,12 @@ namespace Cinderia_Mod_Item_Legacy
             GUI.Box(面板区域, GUIContent.none, _windowStyle);
 
             Color 旧GUI颜色 = GUI.color;
-            GUI.color = 获取稀有度颜色(_currentRequest.品质等级);
+            GUI.color = 获取顶部强调颜色(当前绘制预览索引);
             GUI.DrawTexture(new Rect(面板区域.x, 面板区域.y, 面板区域.width, 6f), _badgeTexture);
             GUI.color = 旧GUI颜色;
 
             Rect 标题区域 = new Rect(面板区域.x + 28f, 面板区域.y + 18f, 面板区域.width - 56f, 40f);
-            GUI.Label(
-                标题区域,
-                string.Format("{0}：选择一个{1}道具", _currentRequest.宝箱名称, 获取稀有度文本(_currentRequest.品质等级)),
-                _titleStyle);
+            GUI.Label(标题区域, _currentRequest.标题文本 ?? "", _titleStyle);
 
             Rect 左区域 = new Rect(面板区域.x + 24f, 面板区域.y + 72f, 面板宽 * 0.52f - 32f, 面板高 - 132f);
             Rect 右区域 = new Rect(左区域.xMax + 16f, 左区域.y, 面板区域.xMax - 24f - (左区域.xMax + 16f), 左区域.height);
@@ -605,7 +612,7 @@ namespace Cinderia_Mod_Item_Legacy
             }
 
             绘制详情面板(右区域, 当前绘制预览索引);
-            GUI.Label(提示区域, "点击左侧条目即可领取，品质随机逻辑保持原版不变。", _hintStyle);
+            GUI.Label(提示区域, _currentRequest.提示文本 ?? "", _hintStyle);
 
             if (_currentRequest == 当前请求
                 && Event.current.type == EventType.Repaint
@@ -736,6 +743,22 @@ namespace Cinderia_Mod_Item_Legacy
             选择请求 request = _currentRequest;
             _currentRequest = null;
             request.完成源.TrySetResult(道具);
+        }
+
+        private Color 获取顶部强调颜色(int 当前绘制预览索引)
+        {
+            if (_currentRequest == null)
+            {
+                return new Color(0.82f, 0.82f, 0.82f, 1f);
+            }
+
+            if (_currentRequest.强调等级 >= 0)
+            {
+                return 获取稀有度颜色(_currentRequest.强调等级);
+            }
+
+            DataMagicCard 当前预览 = _currentRequest.候选道具[Mathf.Clamp(当前绘制预览索引, 0, _currentRequest.候选道具.Count - 1)];
+            return 当前预览 != null ? 获取稀有度颜色(当前预览.ItemLv) : new Color(0.82f, 0.82f, 0.82f, 1f);
         }
 
         private void 初始化样式()
@@ -948,8 +971,9 @@ namespace Cinderia_Mod_Item_Legacy
         private sealed class 选择请求
         {
             public List<DataMagicCard> 候选道具;
-            public int 品质等级;
-            public string 宝箱名称;
+            public string 标题文本;
+            public string 提示文本;
+            public int 强调等级;
             public UniTaskCompletionSource<DataMagicCard> 完成源;
             public int 预览索引;
             public Vector2 滚动位置;
