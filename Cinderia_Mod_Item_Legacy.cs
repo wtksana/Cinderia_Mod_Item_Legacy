@@ -10,6 +10,7 @@ using Rogue.Items;
 using Rogue.NPCs;
 using Rogue.Units;
 using Rogue.Buffs.Trigger;
+using Rogue.Data;
 using System;
 using System.IO;
 using System.Linq;
@@ -86,6 +87,19 @@ namespace Cinderia_Mod_Item_Legacy
             }
         }
 
+        internal static ExcelData 获取Excel数据()
+        {
+            try
+            {
+                return Game.Excel;
+            }
+            catch (Exception ex)
+            {
+                Log?.LogWarning("[Cinderia_Mod_Item_Legacy] 获取 ExcelData 失败: " + ex.Message);
+                return null;
+            }
+        }
+
         private void Awake()
         {
             Log = Logger;
@@ -115,14 +129,15 @@ namespace Cinderia_Mod_Item_Legacy
                 if (_treasureMap4TweakedThisSession)
                     return;
 
-                if (Game.Inst == null || Game.Inst.excel == null || Game.Inst.excel.magicCards == null || Game.Inst.excel.buffs == null)
+                ExcelData excel = 获取Excel数据();
+                if (excel == null || excel.magicCards == null || excel.buffs == null)
                 {
                     Log.LogWarning("[Cinderia_Mod_Item_Legacy] ApplyTreasureMap4Tweaks skipped, excel not ready.");
                     return;
                 }
 
                 // 1) 找到道具数据
-                MagicCardData map4 = Game.Inst.excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
+                MagicCardData map4 = excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
                 if (map4 == null)
                 {
                     Log.LogWarning("[Cinderia_Mod_Item_Legacy] Item not found: 藏宝图4");
@@ -357,13 +372,14 @@ namespace Cinderia_Mod_Item_Legacy
                     return;
                 }
 
-                if (Game.Inst == null || Game.Inst.excel == null || Game.Inst.excel.magicCards == null)
+                ExcelData excel = 获取Excel数据();
+                if (excel == null || excel.magicCards == null)
                 {
                     Log.LogWarning("[Cinderia_Mod_Item_Legacy] DumpAllItemsToFile skipped, excel not ready.");
                     return;
                 }
 
-                MagicCardData[] allCards = Game.Inst.excel.magicCards;
+                MagicCardData[] allCards = excel.magicCards;
                 MagicCardData[] items = allCards
                     .Where(c => c != null && c.kind == "道具")
                     .OrderBy(c => c.ItemLv)
@@ -388,17 +404,18 @@ namespace Cinderia_Mod_Item_Legacy
                 if (!(Cfg_复制器_启用?.Value ?? true))
                     return;
 
-                if (Game.Inst == null || Game.Inst.excel == null || Game.Inst.excel.magicCards == null)
+                ExcelData excel = 获取Excel数据();
+                if (excel == null || excel.magicCards == null)
                     return;
 
-                MagicCardData template = Game.Inst.excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
+                MagicCardData template = excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
                 if (template == null)
                 {
                     Log.LogWarning("[Cinderia_Mod_Item_Legacy] 无法注入复制器，缺少模板道具 藏宝图4");
                     return;
                 }
 
-                var list = Game.Inst.excel.magicCards.ToList();
+                var list = excel.magicCards.ToList();
                 bool addedAny = false;
                 RemoveDuplicatorItemIfExists(list, 0);
                 for (int lv = 1; lv <= 4; lv++)
@@ -455,7 +472,7 @@ namespace Cinderia_Mod_Item_Legacy
 
                 UpdateDuplicatorItemDescriptions(list);
 
-                Game.Inst.excel.magicCards = list.ToArray();
+                excel.magicCards = list.ToArray();
                 if (MagicCard_Manager.Inst != null)
                 {
                     MagicCard_Manager.Inst.重置剩余魔卡卡池();
@@ -695,6 +712,11 @@ namespace Cinderia_Mod_Item_Legacy
                     return;
 
                 MagicCardData data = MagicCard_Manager.id找data(pendingItemId);
+                if (data == null && pendingItemId.StartsWith("复制器", StringComparison.Ordinal))
+                {
+                    EnsureCustomDuplicatorItems();
+                    data = MagicCard_Manager.id找data(pendingItemId);
+                }
                 if (data == null)
                 {
                     Log.LogWarning("[Cinderia_Mod_Item_Legacy] Pending item id not found: " + pendingItemId);
@@ -805,6 +827,21 @@ namespace Cinderia_Mod_Item_Legacy
     internal static class Patch_TreasureMap4_BattleClearReward
     {
         private static bool Prefix(战斗结算时 __instance)
+        {
+            if (__instance?.buff?.data == null || __instance.buff.data.id != "藏宝图四")
+            {
+                return true;
+            }
+
+            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMap4BattleClearReward(__instance);
+            return !handled;
+        }
+    }
+
+    [HarmonyPatch(typeof(战斗结算时包括继续游戏), "清场时")]
+    internal static class Patch_TreasureMap4_BattleClearReward_WithContinue
+    {
+        private static bool Prefix(战斗结算时包括继续游戏 __instance)
         {
             if (__instance?.buff?.data == null || __instance.buff.data.id != "藏宝图四")
             {

@@ -292,68 +292,48 @@ namespace Cinderia_Mod_Item_Legacy
 
         private static List<DataMagicCard> 获取候选道具池(int 品质等级)
         {
-            if (品质等级 == 0)
-            {
-                return Game.Inst.excel.magicCards
-                    .Where(t => t != null && t.kind == "道具" && t.ItemLv == 0 && !(t.keyward?.Contains("没法爆出来") ?? false))
-                    .ToList();
-            }
-
-            List<DataMagicCard> 可获取魔卡卡池 = MagicCard_Manager.Inst.可获取魔卡卡池;
-            List<DataMagicCard> 候选道具 = 可获取魔卡卡池
-                .Where(c => c != null && c.kind == "道具" && (!c.ban || Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c)))
-                .Where(c => c.color.IsNullOrEmpty() || c.color == Game.Inst.Character.data.id)
-                .Where(c => 品质等级 == -1 || c.ItemLv == 品质等级)
-                .ToList();
-
-            候选道具.AddRange(获取额外补充候选道具(品质等级, 可获取魔卡卡池, 候选道具));
-            return 候选道具;
-        }
-
-        private static List<DataMagicCard> 获取额外补充候选道具(int 品质等级, List<DataMagicCard> 原始可获取魔卡卡池, List<DataMagicCard> 已有候选)
-        {
-            if (Game.Inst?.excel?.magicCards == null || MagicCard_Manager.Inst == null)
+            Rogue.ExcelData excel = Cinderia_Mod_Item_Legacy.获取Excel数据();
+            if (excel?.magicCards == null || MagicCard_Manager.Inst == null || Game.Inst?.Character?.data == null)
             {
                 return new List<DataMagicCard>();
             }
 
-            MagicCard_Manager 管理器 = MagicCard_Manager.Inst;
-            HashSet<string> 已有候选Id = new HashSet<string>(
-                (已有候选 ?? new List<DataMagicCard>())
-                .Where(c => c != null && !string.IsNullOrEmpty(c.id))
-                .Select(c => c.id));
-
-            HashSet<string> 原始可用基础Id = new HashSet<string>(
-                (原始可获取魔卡卡池 ?? new List<DataMagicCard>())
-                .Where(c => c != null && c.kind == "道具" && !string.IsNullOrEmpty(c.id))
-                .Select(c => 提取基础道具Id(c.id)));
-
-            List<DataMagicCard> 已拾取及已展示道具 = 管理器.已拾取魔卡
-                .Where(card => card != null && card.data != null)
-                .Select(card => card.data)
-                .Concat(管理器.当前房间卡.Where(card => card != null))
-                .Concat(管理器.上次三选一出的卡.Where(card => card != null))
-                .ToList();
+            HashSet<string> 可掉落基础名 = new HashSet<string>(
+                MagicCard_Manager.Inst.剩余魔卡卡池
+                    .Where(c => c != null && c.kind == "道具" && !string.IsNullOrEmpty(c.id))
+                    .Select(c => 提取基础道具Id(c.id)));
 
             HashSet<string> 已拾取基础名 = new HashSet<string>(
-                已拾取及已展示道具
-                .Where(card => !string.IsNullOrEmpty(card.id))
-                .Select(card => 提取基础道具Id(card.id)));
+                MagicCard_Manager.Inst.已拾取魔卡
+                    .Where(card => card != null && card.data != null && !string.IsNullOrEmpty(card.data.id))
+                    .Select(card => 提取基础道具Id(card.data.id)));
 
             HashSet<string> 已拾取组 = new HashSet<string>(
-                管理器.已拾取魔卡
-                .Where(card => card != null && card.data != null)
-                .SelectMany(card => card.data.groups ?? Array.Empty<string>())
-                .Where(group => !string.IsNullOrEmpty(group)));
+                MagicCard_Manager.Inst.已拾取魔卡
+                    .Where(card => card != null && card.data != null)
+                    .SelectMany(card => card.data.groups ?? Array.Empty<string>())
+                    .Where(group => !string.IsNullOrEmpty(group)));
 
-            return Game.Inst.excel.magicCards
+            if (品质等级 == 0)
+            {
+                return excel.magicCards
+                    .Where(t => t != null && t.kind == "道具" && t.ItemLv == 0)
+                    .Where(t => !(t.keyward?.Contains("没法爆出来") ?? false))
+                    .Where(t => t.color.IsNullOrEmpty() || t.color == Game.Inst.Character.data.id)
+                    .Where(t => !已拾取基础名.Contains(提取基础道具Id(t.id)))
+                    .Where(t => !存在互斥组冲突(t, 已拾取组))
+                    .Where(t => 满足前置条件(t, 已拾取组))
+                    .ToList();
+            }
+
+            return excel.magicCards
                 .Where(c => c != null && c.kind == "道具")
-                .Where(c =>
-                    Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c)
-                    || 原始可用基础Id.Contains(提取基础道具Id(c.id)))
-                .Where(c => !已有候选Id.Contains(c.id))
-                .Where(c => c.color.IsNullOrEmpty() || c.color == Game.Inst.Character.data.id)
                 .Where(c => 品质等级 == -1 || c.ItemLv == 品质等级)
+                .Where(c => Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c)
+                    || 可掉落基础名.Contains(提取基础道具Id(c.id)))
+                .Where(c => c.color.IsNullOrEmpty() || c.color == Game.Inst.Character.data.id)
+                .Where(c => Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c)
+                    || !(c.keyward?.Contains("没法爆出来") ?? false))
                 .Where(c => Cinderia_Mod_Item_Legacy.是否为自定义开箱候选道具(c) || !已拾取基础名.Contains(提取基础道具Id(c.id)))
                 .Where(c => !存在互斥组冲突(c, 已拾取组))
                 .Where(c => 满足前置条件(c, 已拾取组))
@@ -841,13 +821,14 @@ namespace Cinderia_Mod_Item_Legacy
 
         private static void 绘制道具图标(DataMagicCard 道具, Rect 区域)
         {
-            if (道具 == null || Game.Inst == null || Game.Inst.excel == null || Game.Inst.excel.道具图标 == null)
+            Rogue.ExcelData excel = Cinderia_Mod_Item_Legacy.获取Excel数据();
+            if (道具 == null || excel?.道具图标 == null)
             {
                 return;
             }
 
             Sprite 图标;
-            if (!Game.Inst.excel.道具图标.TryGetValue(道具.icon, out 图标) || 图标 == null || 图标.texture == null)
+            if (!excel.道具图标.TryGetValue(道具.icon, out 图标) || 图标 == null || 图标.texture == null)
             {
                 return;
             }
