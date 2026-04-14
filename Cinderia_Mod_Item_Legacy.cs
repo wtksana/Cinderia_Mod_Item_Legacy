@@ -36,12 +36,6 @@ namespace Cinderia_Mod_Item_Legacy
         private static bool _legacyInheritanceSelectionRunning;
         private static bool _treasureMap4TweakedThisSession;
 
-        // ===== 藏宝图4配置（BepInEx cfg） =====
-        private static ConfigEntry<float> Cfg_TreasureMap4_战斗结算触发概率;
-        private static ConfigEntry<float> Cfg_TreasureMap4_小宝箱最终概率;
-        private static ConfigEntry<float> Cfg_TreasureMap4_中宝箱最终概率;
-        private static ConfigEntry<float> Cfg_TreasureMap4_大宝箱最终概率;
-
         // ===== 复制器配置（BepInEx cfg） =====
         private static ConfigEntry<bool> Cfg_复制器_启用;
         private static ConfigEntry<float> Cfg_复制器_绿概率;
@@ -103,10 +97,10 @@ namespace Cinderia_Mod_Item_Legacy
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] New run started.");
 
             EnsureCustomDuplicatorItems();
-            ApplyTreasureMap4Tweaks();
+            ApplyTreasureMapTweaks();
         }
 
-        internal static void ApplyTreasureMap4Tweaks()
+        internal static void ApplyTreasureMapTweaks()
         {
             try
             {
@@ -116,48 +110,24 @@ namespace Cinderia_Mod_Item_Legacy
                 ExcelData excel = 获取Excel数据();
                 if (excel == null || excel.magicCards == null || excel.buffs == null)
                 {
-                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] ApplyTreasureMap4Tweaks skipped, excel not ready.");
+                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] ApplyTreasureMapTweaks skipped, excel not ready.");
                     return;
                 }
 
-                // 1) 找到道具数据
-                MagicCardData map4 = excel.magicCards.FirstOrDefault(c => c != null && c.id == "藏宝图4");
-                if (map4 == null)
-                {
-                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] Item not found: 藏宝图4");
-                    _treasureMap4TweakedThisSession = true;
-                    return;
-                }
-
-                float finalSmall;
-                float finalMid;
-                float finalBig;
-                float noReward;
-                GetTreasureMap4ConfiguredRates(out finalSmall, out finalMid, out finalBig, out noReward);
-                map4.introduce = BuildTreasureMap4Introduce(finalSmall, finalMid, finalBig);
-                Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图4] 新描述: " + (map4.introduce ?? ""));
-                Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] 当前配置 => 小:"
-                    + finalSmall.ToString("0.###")
-                    + ", 中:" + finalMid.ToString("0.###")
-                    + ", 大:" + finalBig.ToString("0.###")
-                    + ", 空:" + noReward.ToString("0.###"));
+                应用藏宝图道具描述(excel, "藏宝图2");
+                应用藏宝图道具描述(excel, "藏宝图3");
+                应用藏宝图道具描述(excel, "藏宝图4");
 
                 _treasureMap4TweakedThisSession = true;
             }
             catch (Exception ex)
             {
-                Log.LogError("[Cinderia_Mod_Item_Legacy] ApplyTreasureMap4Tweaks error: " + ex);
+                Log.LogError("[Cinderia_Mod_Item_Legacy] ApplyTreasureMapTweaks error: " + ex);
             }
         }
 
         private void InitConfig()
         {
-            const string section = "TreasureMap4";
-            Cfg_TreasureMap4_战斗结算触发概率 = Config.Bind(section, "战斗结算触发概率", 1f, "藏宝图4触发总概率（0~1，下面各宝箱概率之和要等于这个值）");
-            Cfg_TreasureMap4_小宝箱最终概率 = Config.Bind(section, "小宝箱最终概率", 0.50f, "清空房间后最终获得小海盗宝箱的概率（0~1）");
-            Cfg_TreasureMap4_中宝箱最终概率 = Config.Bind(section, "中宝箱最终概率", 0.35f, "清空房间后最终获得中海盗宝箱的概率（0~1）");
-            Cfg_TreasureMap4_大宝箱最终概率 = Config.Bind(section, "大宝箱最终概率", 0.15f, "清空房间后最终获得大海盗宝箱的概率（0~1）");
-
             const string duplicatorSection = "Duplicator";
             Cfg_复制器_启用 = Config.Bind(duplicatorSection, "启用", true, "是否注入新增道具“复制器”");
             Cfg_复制器_绿概率 = Config.Bind(duplicatorSection, "绿概率", 0.20f, "拥有绿色复制器时，房间奖励额外复制一份的概率（0~1）");
@@ -173,11 +143,7 @@ namespace Cinderia_Mod_Item_Legacy
             Cfg_上一局继承_候选JSON = Config.Bind(legacyInheritanceSection, "候选道具JSON", "", "内部使用：记录上一局可继承道具列表。");
 
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] Config loaded. trigger="
-                + Cfg_TreasureMap4_战斗结算触发概率.Value.ToString("0.###")
-                + ", small=" + Cfg_TreasureMap4_小宝箱最终概率.Value.ToString("0.###")
-                + ", middle=" + Cfg_TreasureMap4_中宝箱最终概率.Value.ToString("0.###")
-                + ", big=" + Cfg_TreasureMap4_大宝箱最终概率.Value.ToString("0.###")
-                + ", duplicatorEnabled=" + Cfg_复制器_启用.Value
+                + "duplicatorEnabled=" + Cfg_复制器_启用.Value
                 + ", chestSelectionEnabled=" + Cfg_自选开箱_启用.Value
                 + ", legacyInheritanceEnabled=" + Cfg_上一局继承_启用.Value);
         }
@@ -197,16 +163,16 @@ namespace Cinderia_Mod_Item_Legacy
             return data.id.StartsWith("复制器", StringComparison.Ordinal);
         }
 
-        internal static bool TryHandleTreasureMap4BattleClearReward(Trigger trigger)
+        internal static bool TryHandleTreasureMapBattleClearReward(Trigger trigger)
         {
-            if (trigger?.buff?.data == null || trigger.buff.data.id != "藏宝图四")
+            if (trigger?.buff?.data == null || !是否为藏宝图Buff(trigger.buff.data.id))
             {
                 return false;
             }
 
             try
             {
-                if (!CanProcessTreasureMap4Reward(trigger))
+                if (!CanProcessTreasureMapReward(trigger))
                 {
                     return true;
                 }
@@ -214,32 +180,32 @@ namespace Cinderia_Mod_Item_Legacy
                 Trigger_触发次数字段(trigger)++;
                 trigger.buff.道具亮一下(true);
 
-                string rewardPrefab = ResolveTreasureMap4RewardPrefab();
+                string rewardPrefab = ResolveTreasureMapRewardPrefab(trigger.buff.data.id);
                 if (string.IsNullOrEmpty(rewardPrefab))
                 {
-                    Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] 本次清场未生成海盗宝箱。");
+                    Log.LogInfo("[Cinderia_Mod_Item_Legacy] [" + trigger.buff.data.id + "] 本次清场未生成海盗宝箱。");
                     return true;
                 }
 
-                Vector3 createPos = GetTreasureMap4ChestCreatePos();
+                Vector3 createPos = GetTreasureMapChestCreatePos();
                 GameObject rewardObject = Game.实例化预制体(rewardPrefab, createPos);
                 if (rewardObject == null)
                 {
-                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] [藏宝图四] 生成海盗宝箱失败，预制体不存在: " + rewardPrefab);
+                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] [" + trigger.buff.data.id + "] 生成海盗宝箱失败，预制体不存在: " + rewardPrefab);
                     return true;
                 }
 
-                Log.LogInfo("[Cinderia_Mod_Item_Legacy] [藏宝图四] 直接生成海盗宝箱: " + rewardPrefab + " @ " + createPos);
+                Log.LogInfo("[Cinderia_Mod_Item_Legacy] [" + trigger.buff.data.id + "] 直接生成海盗宝箱: " + rewardPrefab + " @ " + createPos);
                 return true;
             }
             catch (Exception ex)
             {
-                Log.LogError("[Cinderia_Mod_Item_Legacy] [藏宝图四] 直接生成海盗宝箱异常: " + ex);
+                Log.LogError("[Cinderia_Mod_Item_Legacy] [藏宝图] 直接生成海盗宝箱异常: " + ex);
                 return false;
             }
         }
 
-        private static bool CanProcessTreasureMap4Reward(Trigger trigger)
+        private static bool CanProcessTreasureMapReward(Trigger trigger)
         {
             if (trigger.skill == null || trigger.cooldown > 0f || trigger.skill.封印 || UI_对话气泡.对话中)
             {
@@ -249,30 +215,24 @@ namespace Cinderia_Mod_Item_Legacy
             return true;
         }
 
-        private static string ResolveTreasureMap4RewardPrefab()
+        private static string ResolveTreasureMapRewardPrefab(string buffId)
         {
-            const string noReward = "__NoReward__";
-            float finalSmall;
-            float finalMid;
-            float finalBig;
-            float noRewardWeight;
-            GetTreasureMap4ConfiguredRates(out finalSmall, out finalMid, out finalBig, out noRewardWeight);
+            TreasureMapRates rates = 获取藏宝图概率(buffId);
             string result = RandomUtils.PseudoRandom(
-                "藏宝图四清场宝箱",
+                buffId + "清场宝箱",
                 true,
                 new ValueTuple<string, float>[]
                 {
-                    new ValueTuple<string, float>("海盗宝箱小", finalSmall),
-                    new ValueTuple<string, float>("海盗宝箱中", finalMid),
-                    new ValueTuple<string, float>("海盗宝箱大", finalBig),
-                    new ValueTuple<string, float>(noReward, noRewardWeight)
+                    new ValueTuple<string, float>("海盗宝箱小", rates.Small),
+                    new ValueTuple<string, float>("海盗宝箱中", rates.Middle),
+                    new ValueTuple<string, float>("海盗宝箱大", rates.Big)
                 });
-            return result == noReward ? null : result;
+            return result;
         }
 
-        private static Vector3 GetTreasureMap4ChestCreatePos()
+        private static Vector3 GetTreasureMapChestCreatePos()
         {
-            Vector3 anchorPos = GetTreasureMap4RewardAnchorPos();
+            Vector3 anchorPos = GetTreasureMapRewardAnchorPos();
             Vector2 randomCircle = UnityEngine.Random.insideUnitCircle;
             if (randomCircle.sqrMagnitude < 0.01f)
             {
@@ -284,7 +244,7 @@ namespace Cinderia_Mod_Item_Legacy
             return MapUtils.ClampToNavMesh(anchorPos + offset, false);
         }
 
-        private static Vector3 GetTreasureMap4RewardAnchorPos()
+        private static Vector3 GetTreasureMapRewardAnchorPos()
         {
             Vector3[] 已有奖励位置 = 可拾取物.所有可拾取物
                 .Where(t => t != null && t.gameObject != null && t.gameObject.activeInHierarchy)
@@ -292,16 +252,16 @@ namespace Cinderia_Mod_Item_Legacy
                 .ToArray();
             if (已有奖励位置.Length > 0)
             {
-                Vector3 默认落点 = GetTreasureMap4DefaultDropPoint();
+                Vector3 默认落点 = GetTreasureMapDefaultDropPoint();
                 return 已有奖励位置
                     .OrderBy(pos => Vector3.Distance(pos, 默认落点))
                     .First();
             }
 
-            return GetTreasureMap4DefaultDropPoint();
+            return GetTreasureMapDefaultDropPoint();
         }
 
-        private static Vector3 GetTreasureMap4DefaultDropPoint()
+        private static Vector3 GetTreasureMapDefaultDropPoint()
         {
             Rogue.Map 当前地图 = Game.Inst != null ? Game_当前地图字段(Game.Inst) : null;
             if (当前地图?.transform == null)
@@ -327,23 +287,19 @@ namespace Cinderia_Mod_Item_Legacy
                 : (Character.Inst != null ? Character.Inst.transform.position : Vector3.zero);
         }
 
-        private static void GetTreasureMap4ConfiguredRates(out float finalSmall, out float finalMid, out float finalBig, out float noReward)
+        private static void 应用藏宝图道具描述(ExcelData excel, string itemId)
         {
-            float triggerChance = Mathf.Clamp01(Cfg_TreasureMap4_战斗结算触发概率?.Value ?? 1f);
-            finalSmall = Mathf.Max(0f, Cfg_TreasureMap4_小宝箱最终概率?.Value ?? 0.50f);
-            finalMid = Mathf.Max(0f, Cfg_TreasureMap4_中宝箱最终概率?.Value ?? 0.35f);
-            finalBig = Mathf.Max(0f, Cfg_TreasureMap4_大宝箱最终概率?.Value ?? 0.15f);
-            float total = finalSmall + finalMid + finalBig;
-
-            if (total > triggerChance && total > 0f)
+            MagicCardData item = excel.magicCards.FirstOrDefault(c => c != null && c.id == itemId);
+            if (item == null)
             {
-                float scale = triggerChance / total;
-                finalSmall *= scale;
-                finalMid *= scale;
-                finalBig *= scale;
+                Log.LogWarning("[Cinderia_Mod_Item_Legacy] Item not found: " + itemId);
+                return;
             }
 
-            noReward = Mathf.Max(0f, 1f - (finalSmall + finalMid + finalBig));
+            string buffId = 获取藏宝图BuffId(itemId);
+            TreasureMapRates rates = 获取藏宝图概率(buffId);
+            item.introduce = BuildTreasureMapIntroduce(rates.Small, rates.Middle, rates.Big, itemId == "藏宝图4");
+            Log.LogInfo("[Cinderia_Mod_Item_Legacy] [" + itemId + "] 新描述: " + (item.introduce ?? ""));
         }
 
         internal static void EnsureCustomDuplicatorItems()
@@ -527,14 +483,6 @@ namespace Cinderia_Mod_Item_Legacy
             }
         }
 
-        private static string BuildTreasureMap4Introduce(float finalSmall, float finalMid, float finalBig)
-        {
-            return "清空房间：有" + ToPercentText(finalSmall) + "几率找到一个破烂海盗宝箱。\n"
-                + "清空房间：有" + ToPercentText(finalMid) + "几率找到一个普通海盗宝箱。\n"
-                + "清空房间：有" + ToPercentText(finalBig) + "几率找到一个高级海盗宝箱。\n"
-                + "装备：打开宝箱时获得1点随机属性。";
-        }
-
         private static string BuildDuplicatorIntroduce(int level)
         {
             float chance = GetDuplicatorChanceByLevel(level);
@@ -562,6 +510,63 @@ namespace Cinderia_Mod_Item_Legacy
         internal static bool 是否为复制器道具Id(string itemId)
         {
             return !string.IsNullOrEmpty(itemId) && itemId.StartsWith("复制器", StringComparison.Ordinal);
+        }
+
+        internal static bool 是否为藏宝图Buff(string buffId)
+        {
+            return buffId == "藏宝图二" || buffId == "藏宝图三" || buffId == "藏宝图四";
+        }
+
+        private static string 获取藏宝图BuffId(string itemId)
+        {
+            switch (itemId)
+            {
+                case "藏宝图2": return "藏宝图二";
+                case "藏宝图3": return "藏宝图三";
+                case "藏宝图4": return "藏宝图四";
+                default: return null;
+            }
+        }
+
+        private static TreasureMapRates 获取藏宝图概率(string buffId)
+        {
+            switch (buffId)
+            {
+                case "藏宝图二":
+                    return new TreasureMapRates(0.6f, 0.3f, 0.1f);
+                case "藏宝图三":
+                    return new TreasureMapRates(0.4f, 0.4f, 0.2f);
+                case "藏宝图四":
+                    return new TreasureMapRates(0.2f, 0.4f, 0.4f);
+                default:
+                    return new TreasureMapRates(0f, 0f, 0f);
+            }
+        }
+
+        private static string BuildTreasureMapIntroduce(float finalSmall, float finalMid, float finalBig, bool includeAttributeLine)
+        {
+            List<string> lines = new List<string>();
+            if (finalSmall > 0f)
+            {
+                lines.Add("清空房间：有" + ToPercentText(finalSmall) + "几率找到一个破烂海盗宝箱。");
+            }
+
+            if (finalMid > 0f)
+            {
+                lines.Add("清空房间：有" + ToPercentText(finalMid) + "几率找到一个普通海盗宝箱。");
+            }
+
+            if (finalBig > 0f)
+            {
+                lines.Add("清空房间：有" + ToPercentText(finalBig) + "几率找到一个高级海盗宝箱。");
+            }
+
+            if (includeAttributeLine)
+            {
+                lines.Add("装备：打开宝箱时获得1点随机属性。");
+            }
+
+            return string.Join("\n", lines);
         }
 
         internal static void 记录上一局继承候选(string source)
@@ -885,33 +890,47 @@ namespace Cinderia_Mod_Item_Legacy
     }
 
     [HarmonyPatch(typeof(战斗结算时), "清场时")]
-    internal static class Patch_TreasureMap4_BattleClearReward
+    internal static class Patch_TreasureMap_BattleClearReward
     {
         private static bool Prefix(战斗结算时 __instance)
         {
-            if (__instance?.buff?.data == null || __instance.buff.data.id != "藏宝图四")
+            if (__instance?.buff?.data == null || !Cinderia_Mod_Item_Legacy.是否为藏宝图Buff(__instance.buff.data.id))
             {
                 return true;
             }
 
-            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMap4BattleClearReward(__instance);
+            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMapBattleClearReward(__instance);
             return !handled;
         }
     }
 
     [HarmonyPatch(typeof(战斗结算时包括继续游戏), "清场时")]
-    internal static class Patch_TreasureMap4_BattleClearReward_WithContinue
+    internal static class Patch_TreasureMap_BattleClearReward_WithContinue
     {
         private static bool Prefix(战斗结算时包括继续游戏 __instance)
         {
-            if (__instance?.buff?.data == null || __instance.buff.data.id != "藏宝图四")
+            if (__instance?.buff?.data == null || !Cinderia_Mod_Item_Legacy.是否为藏宝图Buff(__instance.buff.data.id))
             {
                 return true;
             }
 
-            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMap4BattleClearReward(__instance);
+            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMapBattleClearReward(__instance);
             return !handled;
         }
+    }
+
+    internal readonly struct TreasureMapRates
+    {
+        internal TreasureMapRates(float small, float middle, float big)
+        {
+            Small = small;
+            Middle = middle;
+            Big = big;
+        }
+
+        internal float Small { get; }
+        internal float Middle { get; }
+        internal float Big { get; }
     }
 
 }
