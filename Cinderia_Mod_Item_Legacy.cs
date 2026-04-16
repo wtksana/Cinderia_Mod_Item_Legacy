@@ -904,21 +904,6 @@ namespace Cinderia_Mod_Item_Legacy
         }
     }
 
-    [HarmonyPatch(typeof(战斗结算时包括继续游戏), "清场时")]
-    internal static class Patch_TreasureMap_BattleClearReward_WithContinue
-    {
-        private static bool Prefix(战斗结算时包括继续游戏 __instance)
-        {
-            if (__instance?.buff?.data == null || !Cinderia_Mod_Item_Legacy.是否为藏宝图Buff(__instance.buff.data.id))
-            {
-                return true;
-            }
-
-            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMapBattleClearReward(__instance);
-            return !handled;
-        }
-    }
-
     internal readonly struct TreasureMapRates
     {
         internal TreasureMapRates(float small, float middle, float big)
