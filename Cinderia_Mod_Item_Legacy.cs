@@ -48,19 +48,27 @@ namespace Cinderia_Mod_Item_Legacy
 
         // ===== 上一局继承配置（BepInEx cfg） =====
         private static ConfigEntry<bool> Cfg_上一局继承_启用;
-        private static ConfigEntry<string> Cfg_上一局继承_候选JSON;
+        private static ConfigEntry<string> Cfg_上一局继承_候选列表;
 
-        private static string 上一局继承候选JSON
+        // ===== 藏宝图配置（BepInEx cfg） =====
+        private static ConfigEntry<float> Cfg_藏宝图4_小宝箱概率;
+        private static ConfigEntry<float> Cfg_藏宝图4_中宝箱概率;
+        private static ConfigEntry<float> Cfg_藏宝图4_大宝箱概率;
+
+        // ===== 技能选择配置（BepInEx cfg） =====
+        private static ConfigEntry<int> Cfg_技能选择额外刷新次数;
+
+        private static string 上一局继承候选列表
         {
             get
             {
-                return (Cfg_上一局继承_候选JSON?.Value ?? "").Trim();
+                return (Cfg_上一局继承_候选列表?.Value ?? "").Trim();
             }
             set
             {
-                if (Cfg_上一局继承_候选JSON != null)
+                if (Cfg_上一局继承_候选列表 != null)
                 {
-                    Cfg_上一局继承_候选JSON.Value = (value ?? "").Trim();
+                    Cfg_上一局继承_候选列表.Value = (value ?? "").Trim();
                 }
                 _configFile?.Save();
             }
@@ -140,17 +148,35 @@ namespace Cinderia_Mod_Item_Legacy
 
             const string legacyInheritanceSection = "LegacyInheritance";
             Cfg_上一局继承_启用 = Config.Bind(legacyInheritanceSection, "启用", true, "是否启用‘结算记录上一局全部道具，并在下局第一个房间自选继承一个道具’功能");
-            Cfg_上一局继承_候选JSON = Config.Bind(legacyInheritanceSection, "候选道具JSON", "", "内部使用：记录上一局可继承道具列表。");
+            Cfg_上一局继承_候选列表 = Config.Bind(legacyInheritanceSection, "候选道具列表", "", "内部使用：记录上一局可继承道具，使用英文逗号分隔。");
+
+            const string treasureMapSection = "TreasureMap";
+            Cfg_藏宝图4_小宝箱概率 = Config.Bind(treasureMapSection, "藏宝图4_小宝箱概率", 0.2f, "最高级藏宝图触发时，生成海盗宝箱小的权重/概率值（建议 0~1）");
+            Cfg_藏宝图4_中宝箱概率 = Config.Bind(treasureMapSection, "藏宝图4_中宝箱概率", 0.4f, "最高级藏宝图触发时，生成海盗宝箱中的权重/概率值（建议 0~1）");
+            Cfg_藏宝图4_大宝箱概率 = Config.Bind(treasureMapSection, "藏宝图4_大宝箱概率", 0.4f, "最高级藏宝图触发时，生成海盗宝箱大的权重/概率值（建议 0~1）");
+
+            const string skillSelectionSection = "SkillSelection";
+            Cfg_技能选择额外刷新次数 = Config.Bind(skillSelectionSection, "额外刷新次数", 0, "主动/被动技能选择界面在默认刷新次数基础上额外增加的刷新次数。");
 
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] Config loaded. trigger="
                 + "duplicatorEnabled=" + Cfg_复制器_启用.Value
                 + ", chestSelectionEnabled=" + Cfg_自选开箱_启用.Value
-                + ", legacyInheritanceEnabled=" + Cfg_上一局继承_启用.Value);
+                + ", legacyInheritanceEnabled=" + Cfg_上一局继承_启用.Value
+                + ", extraSkillRefreshCount=" + Cfg_技能选择额外刷新次数.Value
+                + ", treasureMap4Rates="
+                + Cfg_藏宝图4_小宝箱概率.Value.ToString("0.###") + "/"
+                + Cfg_藏宝图4_中宝箱概率.Value.ToString("0.###") + "/"
+                + Cfg_藏宝图4_大宝箱概率.Value.ToString("0.###"));
         }
 
         internal static bool 是否启用自选开箱()
         {
             return Cfg_自选开箱_启用?.Value ?? true;
+        }
+
+        internal static int 获取额外技能刷新次数()
+        {
+            return Mathf.Max(0, Cfg_技能选择额外刷新次数?.Value ?? 0);
         }
 
         internal static bool 是否为自定义开箱候选道具(MagicCardData data)
@@ -218,16 +244,42 @@ namespace Cinderia_Mod_Item_Legacy
         private static string ResolveTreasureMapRewardPrefab(string buffId)
         {
             TreasureMapRates rates = 获取藏宝图概率(buffId);
-            string result = RandomUtils.PseudoRandom(
-                buffId + "清场宝箱",
-                true,
-                new ValueTuple<string, float>[]
-                {
-                    new ValueTuple<string, float>("海盗宝箱小", rates.Small),
-                    new ValueTuple<string, float>("海盗宝箱中", rates.Middle),
-                    new ValueTuple<string, float>("海盗宝箱大", rates.Big)
-                });
-            return result;
+            float small = Mathf.Max(0f, rates.Small);
+            float middle = Mathf.Max(0f, rates.Middle);
+            float big = Mathf.Max(0f, rates.Big);
+            float total = small + middle + big;
+
+            if (total <= 0f)
+            {
+                return null;
+            }
+
+            if (total > 1f)
+            {
+                small /= total;
+                middle /= total;
+                big /= total;
+            }
+
+            float roll = Game.获取一个固定随机数float(buffId + "清场宝箱");
+            if (roll < small)
+            {
+                return "海盗宝箱小";
+            }
+
+            roll -= small;
+            if (roll < middle)
+            {
+                return "海盗宝箱中";
+            }
+
+            roll -= middle;
+            if (roll < big)
+            {
+                return "海盗宝箱大";
+            }
+
+            return null;
         }
 
         private static Vector3 GetTreasureMapChestCreatePos()
@@ -537,10 +589,25 @@ namespace Cinderia_Mod_Item_Legacy
                 case "藏宝图三":
                     return new TreasureMapRates(0.4f, 0.4f, 0.2f);
                 case "藏宝图四":
-                    return new TreasureMapRates(0.2f, 0.4f, 0.4f);
+                    return 获取藏宝图四配置概率();
                 default:
                     return new TreasureMapRates(0f, 0f, 0f);
             }
+        }
+
+        private static TreasureMapRates 获取藏宝图四配置概率()
+        {
+            float small = Mathf.Max(0f, Cfg_藏宝图4_小宝箱概率?.Value ?? 0.2f);
+            float middle = Mathf.Max(0f, Cfg_藏宝图4_中宝箱概率?.Value ?? 0.4f);
+            float big = Mathf.Max(0f, Cfg_藏宝图4_大宝箱概率?.Value ?? 0.4f);
+            float total = small + middle + big;
+
+            if (total <= 0f)
+            {
+                return new TreasureMapRates(0.2f, 0.4f, 0.4f);
+            }
+
+            return new TreasureMapRates(small / total, middle / total, big / total);
         }
 
         private static string BuildTreasureMapIntroduce(float finalSmall, float finalMid, float finalBig, bool includeAttributeLine)
@@ -593,7 +660,7 @@ namespace Cinderia_Mod_Item_Legacy
                     .Distinct()
                     .ToArray();
 
-                上一局继承候选JSON = itemIds.Length > 0 ? JsonConvert.SerializeObject(itemIds) : "";
+                上一局继承候选列表 = itemIds.Length > 0 ? string.Join(",", itemIds) : "";
                 Log.LogInfo("[Cinderia_Mod_Item_Legacy] 已记录上一局继承候选 source=" + source + ", count=" + itemIds.Length);
             }
             catch (Exception ex)
@@ -609,7 +676,7 @@ namespace Cinderia_Mod_Item_Legacy
                 return;
             }
 
-            if (string.IsNullOrEmpty(上一局继承候选JSON))
+            if (string.IsNullOrEmpty(上一局继承候选列表))
             {
                 return;
             }
@@ -657,7 +724,7 @@ namespace Cinderia_Mod_Item_Legacy
                 List<MagicCardData> 候选道具 = 获取上一局继承候选道具();
                 if (候选道具.Count == 0)
                 {
-                    上一局继承候选JSON = "";
+                    上一局继承候选列表 = "";
                     return;
                 }
 
@@ -689,7 +756,7 @@ namespace Cinderia_Mod_Item_Legacy
                 }
 
                 发放上一局继承道具(选中道具, source);
-                上一局继承候选JSON = "";
+                上一局继承候选列表 = "";
             }
             catch (Exception ex)
             {
@@ -701,13 +768,18 @@ namespace Cinderia_Mod_Item_Legacy
         {
             try
             {
-                string json = 上一局继承候选JSON;
-                if (string.IsNullOrEmpty(json))
+                string raw = 上一局继承候选列表;
+                if (string.IsNullOrEmpty(raw))
                 {
                     return new System.Collections.Generic.List<MagicCardData>();
                 }
 
-                string[] itemIds = JsonConvert.DeserializeObject<string[]>(json) ?? Array.Empty<string>();
+                string[] itemIds = 解析继承候选列表(raw);
+                if (itemIds.Length == 0)
+                {
+                    return new System.Collections.Generic.List<MagicCardData>();
+                }
+
                 if (itemIds.Any(是否为复制器道具Id))
                 {
                     EnsureCustomDuplicatorItems();
@@ -757,6 +829,70 @@ namespace Cinderia_Mod_Item_Legacy
 
             pickup.Init(data, true, null);
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] 已发放上一局继承道具 source=" + source + ", id=" + data.id + ", mode=drop");
+        }
+
+        private static string[] 解析继承候选列表(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return Array.Empty<string>();
+            }
+
+            string text = raw.Trim();
+            if (text.StartsWith("[", StringComparison.Ordinal))
+            {
+                try
+                {
+                    string[] oldJson = JsonConvert.DeserializeObject<string[]>(text) ?? Array.Empty<string>();
+                    if (oldJson.Length > 0)
+                    {
+                        上一局继承候选列表 = string.Join(",", oldJson);
+                    }
+                    return oldJson;
+                }
+                catch (Exception ex)
+                {
+                    Log.LogWarning("[Cinderia_Mod_Item_Legacy] 旧版继承候选 JSON 解析失败，将按逗号分隔继续处理: " + ex.Message);
+                }
+            }
+
+            return text
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(token => token.Trim())
+                .Where(token => !string.IsNullOrEmpty(token))
+                .Select(解析继承候选标识)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
+                .ToArray();
+        }
+
+        private static string 解析继承候选标识(string token)
+        {
+            if (string.IsNullOrEmpty(token))
+            {
+                return null;
+            }
+
+            MagicCardData byId = MagicCard_Manager.id找data(token);
+            if (byId != null)
+            {
+                return byId.id;
+            }
+
+            ExcelData excel = 获取Excel数据();
+            if (excel?.magicCards == null)
+            {
+                return null;
+            }
+
+            MagicCardData byName = excel.magicCards
+                .Where(data => data != null && data.kind == "道具")
+                .FirstOrDefault(data =>
+                    string.Equals(data.id, token, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(data.name, token, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(Game.获取多语言_MagicCard_name(string.IsNullOrEmpty(data.name) ? data.id : data.name), token, StringComparison.OrdinalIgnoreCase));
+
+            return byName?.id;
         }
 
         private static float GetDuplicatorChanceByLevel(int level)
@@ -868,6 +1004,26 @@ namespace Cinderia_Mod_Item_Legacy
         }
     }
 
+    [HarmonyPatch(typeof(Character), "角色出门时")]
+    internal static class Patch_ExtraRefreshCount_OnCharacterLeaveHome
+    {
+        private static void Postfix()
+        {
+            if (Game.PlayerData == null)
+            {
+                return;
+            }
+
+            int extraCount = Cinderia_Mod_Item_Legacy.获取额外技能刷新次数();
+            if (extraCount <= 0)
+            {
+                return;
+            }
+
+            Game.PlayerData.三选一刷新次数 += extraCount;
+        }
+    }
+
     [HarmonyPatch(typeof(房间_入口), "进入新房间")]
     internal static class Patch_LegacyInheritanceSelection_OnEnterRoom
     {
@@ -893,6 +1049,21 @@ namespace Cinderia_Mod_Item_Legacy
     internal static class Patch_TreasureMap_BattleClearReward
     {
         private static bool Prefix(战斗结算时 __instance)
+        {
+            if (__instance?.buff?.data == null || !Cinderia_Mod_Item_Legacy.是否为藏宝图Buff(__instance.buff.data.id))
+            {
+                return true;
+            }
+
+            bool handled = Cinderia_Mod_Item_Legacy.TryHandleTreasureMapBattleClearReward(__instance);
+            return !handled;
+        }
+    }
+
+    [HarmonyPatch(typeof(战斗结算时包括继续游戏), "清场时")]
+    internal static class Patch_TreasureMap_BattleClearReward_IncludeContinue
+    {
+        private static bool Prefix(战斗结算时包括继续游戏 __instance)
         {
             if (__instance?.buff?.data == null || !Cinderia_Mod_Item_Legacy.是否为藏宝图Buff(__instance.buff.data.id))
             {
