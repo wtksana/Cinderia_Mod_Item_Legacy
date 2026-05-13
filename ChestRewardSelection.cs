@@ -41,6 +41,8 @@ namespace Cinderia_Mod_Item_Legacy
             AccessTools.FieldRefAccess<可拾取物, bool>("isPicked");
         private static readonly AccessTools.FieldRef<可拾取物, string> 主角拾取动作名字段 =
             AccessTools.FieldRefAccess<可拾取物, string>("主角拾取动作名");
+        private static readonly AccessTools.FieldRef<可拾取物, bool> 允许执行存档相关字段 =
+            AccessTools.FieldRefAccess<可拾取物, bool>("允许执行存档相关");
 
         internal static bool 是否支持自选(道具宝箱大 宝箱)
         {
@@ -454,7 +456,10 @@ namespace Cinderia_Mod_Item_Legacy
             }
 
             宝箱.OnDeselect(true);
-            WavesManager.RewardPicked();
+            if (允许执行存档相关字段(宝箱))
+            {
+                WavesManager.RewardPicked();
+            }
         }
 
         private sealed class 开箱候选上下文
