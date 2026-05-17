@@ -18,6 +18,7 @@ Cinderia_Mod_Item_Legacy/
 ├─ ChestRewardSelection.cs           # 自选开箱流程和 IMGUI 选择界面
 ├─ Cinderia_Mod_Item_Legacy.csproj   # .NET Framework 4.7.2 项目文件
 ├─ Cinderia_Mod_Item_Legacy.slnx     # 解决方案入口
+├─ Cinderia_Game/                    # junction 链接，指向游戏根目录，提供程序集引用与 DLL 部署目标（.gitignore 已忽略）
 ├─ Properties/AssemblyInfo.cs        # 程序集信息
 ├─ README.md                         # 项目说明
 └─ DEVELOPMENT_RECORD.md             # 开发记录和后续维护说明
@@ -29,33 +30,44 @@ Cinderia_Mod_Item_Legacy/
 - Cinderia 游戏根目录
 - BepInEx Unity Mono
 - .NET SDK 或可用的 MSBuild/dotnet 构建环境
-- 游戏反编译源码目录：`../Assembly-CSharp`
-- 游戏程序集引用目录：`../Cinderia_Data/Managed`
+
+项目通过 `Cinderia_Game` junction 定位游戏目录，所有程序集引用与构建产物均基于该链接，项目本身无需放置在游戏目录之下。首次拉取项目后需要在项目根创建 junction：
+
+```powershell
+# 在项目根目录执行，把目标路径替换为实际游戏根目录
+cmd /c mklink /J Cinderia_Game "C:\Programs\Steam\steamapps\common\Cinderia"
+```
+
+创建后，以下路径需要可访问：
+
+- `Cinderia_Game/BepInEx/`（Harmony 与 BepInEx 程序集、`plugins/` 输出目录）
+- `Cinderia_Game/Cinderia_Data/Managed/`（Unity 与游戏程序集）
+- `Cinderia_Game/Assembly-CSharp/`（可选，用于查阅反编译源码；若不存在可用 ilspycmd 反编译生成）
 
 项目目标框架为 `.NET Framework 4.7.2`，Debug 构建输出到：
 
 ```text
-../BepInEx/plugins/Cinderia_Mod_Item_Legacy.dll
+Cinderia_Game/BepInEx/plugins/Cinderia_Mod_Item_Legacy.dll
 ```
+
+通过 junction 直接写入游戏目录，无需手动复制。
 
 ## 构建
 
-在游戏根目录执行：
+在项目根目录执行：
 
 ```powershell
-$env:DOTNET_CLI_HOME = (Resolve-Path '.\Cinderia_Mod_Item_Legacy').Path
-$env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
-dotnet build '.\Cinderia_Mod_Item_Legacy\Cinderia_Mod_Item_Legacy.csproj' -t:Rebuild
+dotnet build .\Cinderia_Mod_Item_Legacy.csproj -t:Rebuild
 ```
 
-构建成功后，DLL 会写入 `BepInEx/plugins/`。启动游戏后可在 `BepInEx/LogOutput.log` 中查看插件日志，日志前缀为 `Cinderia_Mod_Item_Legacy`。
+构建成功后，DLL 会写入 `Cinderia_Game/BepInEx/plugins/`。启动游戏后可在 `Cinderia_Game/BepInEx/LogOutput.log` 中查看插件日志，日志前缀为 `Cinderia_Mod_Item_Legacy`。
 
 ## 配置
 
 BepInEx 会生成配置文件：
 
 ```text
-BepInEx/config/Cinderia_Mod_Item_Legacy.cfg
+Cinderia_Game/BepInEx/config/Cinderia_Mod_Item_Legacy.cfg
 ```
 
 当前配置分组：
@@ -114,12 +126,12 @@ docs: 整理mod开发记录
 
 ```powershell
 git status --short
-dotnet build '.\Cinderia_Mod_Item_Legacy.csproj' -t:Rebuild
+dotnet build .\Cinderia_Mod_Item_Legacy.csproj -t:Rebuild
 ```
 
 ## 维护提示
 
-游戏更新后优先核对这些补丁点：
+游戏更新后优先核对以下 Harmony 补丁目标：
 
 - `Rogue.Items.道具宝箱大.获得奖励`
 - `Rogue.WavesManager.CreateReward`
@@ -130,4 +142,10 @@ dotnet build '.\Cinderia_Mod_Item_Legacy.csproj' -t:Rebuild
 - `Rogue.Buffs.Trigger.战斗结算时.清场时`
 - `Rogue.Buffs.Trigger.战斗结算时包括继续游戏.清场时`
 
-如果运行时功能失效，先看 `BepInEx/LogOutput.log`，再对照 `DEVELOPMENT_RECORD.md` 的排查清单。
+以及 mod 直接调用的关键工具方法（游戏曾经改名过这些 API）：
+
+- `Game.获取多语言_MagicCard名称(string id)` / `Game.获取多语言_MagicCard描述(string id)`
+- `MagicCard_Manager.id找data` / `MagicCard_Manager.Inst.放到一个空槽位_返回魔卡`
+- `Game.实例化预制体` / `Game.获取一个固定随机数float` / `Game.获取一个固定随机数bool`
+
+如果运行时功能失效，先看 `Cinderia_Game/BepInEx/LogOutput.log`，再对照 `DEVELOPMENT_RECORD.md` 的排查清单。

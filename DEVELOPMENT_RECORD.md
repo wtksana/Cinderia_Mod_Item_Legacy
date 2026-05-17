@@ -8,10 +8,22 @@
 - BepInEx 插件标识：`Cinderia_Mod_Item_Legacy`
 - 当前版本号：`1.1.0`
 - 目标框架：`.NET Framework 4.7.2`
-- Debug 输出：`../BepInEx/plugins/`
+- Debug 输出：`Cinderia_Game/BepInEx/plugins/`（通过项目根的 `Cinderia_Game` junction 写入游戏目录）
 - 主要源码：
   - `Cinderia_Mod_Item_Legacy.cs`
   - `ChestRewardSelection.cs`
+
+## 项目环境
+
+项目通过位于项目根的 `Cinderia_Game` junction 链接到游戏根目录，所有程序集 `HintPath` 与 `OutputPath` 都基于此链接，项目本身可独立于游戏目录。
+
+首次拉取项目后需要创建 junction：
+
+```powershell
+cmd /c mklink /J Cinderia_Game "<游戏根目录>"
+```
+
+`Cinderia_Game` 已加入 `.gitignore`，不会入库。
 
 ## 功能记录
 
@@ -47,10 +59,11 @@
 - 复制器依赖 `ExcelData.magicCards` 和 `ExcelData.buffs` 可写。
 - 如果游戏更新后 `藏宝图4` 字段结构变化，需要重新核对克隆字段。
 - 如果额外道具格异常，优先核对原版 `宽松的腰带` 对应 Buff 的脚本字段和 `scriptData` 语义。
+- `WavesManager.CreateReward` 在 5-17 版本签名为 `static UniTask<bool> CreateReward(string, Vector3?, bool, int?)`，Postfix 参数列表必须严格对齐。
 
 ### 自选开箱
 
-目标：保留原版“先随机品质”逻辑，把“随机具体道具”改为“玩家从同品质候选池选择”。
+目标：保留原版"先随机品质"逻辑，把"随机具体道具"改为"玩家从同品质候选池选择"。
 
 主要入口：
 
@@ -81,6 +94,7 @@
 - 候选池基于 `MagicCard_Manager.Inst.剩余魔卡卡池`、已拾取基础名、互斥组、前置条件和角色颜色过滤。
 - `复制器` 作为自定义候选道具额外放行，避免因为不在原版卡池里而不可选。
 - 选择界面使用 IMGUI 绘制，支持中文字体、图标、详情面板。
+- 名称与描述使用 `Game.获取多语言_MagicCard名称(id)` / `Game.获取多语言_MagicCard描述(id)`，参数必须传 `data.id`。
 - 如果选择界面异常或候选池为空，会回退为原版等权随机。
 
 关键反射字段：
@@ -89,10 +103,11 @@
 - `Rogue.Units.Unit.unitEvent`
 - `可拾取物.isPicked`
 - `可拾取物.主角拾取动作名`
+- `可拾取物.允许执行存档相关`
 
 维护注意：
 
-- 原版 `道具宝箱大.获得奖励` 如果新增流程，需要同步检查 `播放开箱并掉落奖励` 是否漏掉新逻辑。
+- 原版 `道具宝箱大.获得奖励` 如果新增流程，需要同步检查 `播放开箱并掉落奖励` 是否漏掉新逻辑。例如 5-17 版本在 `OnDeselect(true)` 之后多了一个 `await UniTaskUtils.Delay(0.3f)` 才调 `RewardPicked()`，mod 自选流程未跟进，目前不影响功能但表现节奏略有差异。
 - 目前 `播放开箱并掉落奖励` 会执行 `WavesManager.RewardPicked()`，如果原版存档条件变化，需要重新核对。
 - Unity IMGUI 布局必须保证 Layout/Repaint 分支控件数量一致，否则会出现 `GUILayoutGroup.GetNext` 异常。
 
@@ -133,7 +148,7 @@
 
 - 触发后调用 `trigger.设置cd()`，增加 `triggerCount`，并调用 `trigger.buff.道具亮一下(true)`。
 - 宝箱位置以当前房间奖励位置为锚点，随机偏移后用 `MapUtils.ClampToNavMesh` 修正。
-- 描述文本会按当前概率重写，`藏宝图4` 保留“打开宝箱时获得 1 点随机属性”的描述行。
+- 描述文本会按当前概率重写，`藏宝图4` 保留"打开宝箱时获得 1 点随机属性"的描述行。
 - 当前随机使用 `Game.获取一个固定随机数float(buffId + "清场宝箱")`。
 
 维护注意：
@@ -170,6 +185,7 @@
 - 候选保存为英文逗号分隔，便于手动编辑。
 - 读取时兼容旧版 JSON 数组格式，成功解析后会自动写回逗号分隔格式。
 - 首房间判定使用 `FateManager.当前关卡数 == 0`，并排除 `Game.局外` 和老家地图。
+- 候选排序使用 `Game.获取多语言_MagicCard名称(data.id)`，参数必须传 `data.id`。
 - 发放时优先直接放入空槽，失败则生成 `换下来的魔卡` 掉落物。
 
 维护注意：
@@ -218,6 +234,21 @@
 | `Patch_TreasureMap_BattleClearReward` | `战斗结算时.清场时` | 藏宝图清场掉宝箱 |
 | `Patch_TreasureMap_BattleClearReward_IncludeContinue` | `战斗结算时包括继续游戏.清场时` | 兼容新版藏宝图清场触发 |
 
+## 直接调用的关键游戏 API
+
+这些 API 不走 Harmony patch，由 mod 直接通过反编译引用调用，游戏更新若改名或改签名会直接 `MissingMethodException`：
+
+- `Game.获取多语言_MagicCard名称(string id)`
+- `Game.获取多语言_MagicCard描述(string id)`
+- `Game.获取一个固定随机数float(string)` / `Game.获取一个固定随机数bool(string, float)`
+- `Game.实例化预制体(string, Vector3)`
+- `MagicCard_Manager.id找data(string)`
+- `MagicCard_Manager.Inst.放到一个空槽位_返回魔卡(List<MagicCard>, string, bool)`
+- `MagicCard_Manager.Inst.重置剩余魔卡卡池()`
+- `WavesManager.CreateReward(string, Vector3?, bool, int?)` 返回 `UniTask<bool>`
+- `MapUtils.ClampToNavMesh(Vector3, bool)`
+- `RandomUtils.PseudoRandom<T>(string, bool, params (T, float)[])`
+
 ## 配置项清单
 
 | 分组 | 配置项 | 类型 | 默认值 |
@@ -237,35 +268,46 @@
 
 ## 游戏更新后的核对流程
 
-1. 重新反编译 `Assembly-CSharp`。
-2. 搜索所有 Harmony 目标方法是否仍存在。
+1. 用 ilspycmd 重新反编译 `Cinderia_Game/Cinderia_Data/Managed/Assembly-CSharp.dll` 到本地，例如：
+
+   ```powershell
+   ilspycmd .\Cinderia_Game\Cinderia_Data\Managed\Assembly-CSharp.dll -p -o .\tmp_decompile\new_full
+   ```
+
+2. 搜索所有 Harmony 目标方法是否仍存在（见上方清单）。
 3. 搜索所有 `FieldRefAccess` 字段是否仍存在。
-4. 对照原版方法实现，确认调用时机和语义没有变化。
-5. 执行 `dotnet build`，确认能链接新版程序集。
-6. 进游戏测试以下最小用例：
+4. 搜索"直接调用的关键游戏 API"清单中的每个方法签名，确认未改名、未改参数语义。
+5. 对照原版方法实现，确认调用时机和语义没有变化。
+6. 执行 `dotnet build .\Cinderia_Mod_Item_Legacy.csproj -t:Rebuild`，确认能链接新版程序集。
+7. 进游戏测试以下最小用例：
    - 复制器是否能出现在候选池。
-   - 大宝箱/中海盗宝箱是否弹出自选界面。
+   - 大宝箱/中海盗宝箱是否弹出自选界面，名称和描述显示正确。
    - `藏宝图4` 清场是否输出日志并按配置掉宝箱。
    - 上一局继承是否在第一个房间弹窗。
    - 技能选择刷新次数是否等于原版值加配置值。
+8. 验证完成后清理 `tmp_decompile/` 临时目录（已加入 `.gitignore`）。
 
 ## 常见排查
 
 ### 启动时报补丁错误
 
-检查目标类型、方法名和签名是否变化。优先搜索：
+检查目标类型、方法名和签名是否变化。优先在反编译目录中搜索：
 
 ```powershell
-rg -n "class 道具宝箱大|获得奖励\(|class Character|角色出门时\(|class WavesManager|CreateReward\(|class 战斗结算时" ..\Assembly-CSharp
+rg -n "class 道具宝箱大|获得奖励\(|class Character|角色出门时\(|class WavesManager|CreateReward\(|class 战斗结算时" .\tmp_decompile\new_full
 ```
 
-### 自选开箱没有候选道具
+### 自选开箱没有候选道具或弹窗为空
 
 检查：
 
 - `MagicCard_Manager.Inst.剩余魔卡卡池` 是否已初始化。
 - 自定义道具是否已通过 `EnsureCustomDuplicatorItems` 注入。
 - 道具是否被 `没法爆出来`、互斥组、前置条件、角色颜色过滤。
+
+### 自选开箱界面卡片没有名称/描述，或异常打开后回退随机
+
+通常是 `Game.获取多语言_MagicCard名称` / `获取多语言_MagicCard描述` API 改名或参数语义又变了。游戏 5-17 版本就是从 `_name(string input)` / `_introduce(string input)` 改成了 `名称(string id)` / `描述(string id)`。日志中会看到 `MissingMethodException` 或 `TargetInvocationException`。
 
 ### 藏宝图概率不生效
 
@@ -274,7 +316,7 @@ rg -n "class 道具宝箱大|获得奖励\(|class Character|角色出门时\(|cl
 - 日志是否出现 `[藏宝图四]`。
 - Buff id 是否仍为 `藏宝图四`。
 - Trigger 是否仍为 `战斗结算时` 或 `战斗结算时包括继续游戏`。
-- 配置文件是否写在 `BepInEx/config/Cinderia_Mod_Item_Legacy.cfg`。
+- 配置文件是否写在 `Cinderia_Game/BepInEx/config/Cinderia_Mod_Item_Legacy.cfg`。
 
 ### 技能选择额外刷新次数不生效
 
@@ -298,6 +340,7 @@ rg -n "class 道具宝箱大|获得奖励\(|class Character|角色出门时\(|cl
 - `新增上一局继承道具选择流程`：继承逻辑改为下局首房间弹窗选择。
 - `feat: 统一藏宝图2至4的掉落逻辑与道具描述`：统一藏宝图掉箱逻辑。
 - `Add skill refresh and treasure map configs`：加入技能刷新次数和藏宝图4概率配置。
+- 2026-05-17：兼容游戏 5-17 更新，替换 `获取多语言_MagicCard_name/_introduce` 为 `获取多语言_MagicCard名称/描述`；csproj 改用 `Cinderia_Game` junction 定位程序集与输出目录。
 
 ## 后续建议
 
@@ -305,3 +348,4 @@ rg -n "class 道具宝箱大|获得奖励\(|class Character|角色出门时\(|cl
 - 为每个 Harmony 补丁补充一条启动日志，方便判断游戏更新后是否命中。
 - 对藏宝图和技能刷新次数增加更明确的运行日志，减少只能靠体感判断概率的情况。
 - 自选开箱流程应定期和原版 `道具宝箱大.获得奖励` 对照，避免游戏更新后遗漏新逻辑。
+- 把"直接调用的关键游戏 API"清单也用 `AccessTools.Method` 反射调用，把游戏改名错误从启动崩溃降级为 catch + 日志，提高对游戏更新的鲁棒性。
