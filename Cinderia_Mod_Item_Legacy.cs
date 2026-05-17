@@ -790,7 +790,7 @@ namespace Cinderia_Mod_Item_Legacy
                     .Select(id => MagicCard_Manager.id找data(id))
                     .Where(data => data != null && data.kind == "道具" && data.id != "项链")
                     .OrderByDescending(data => data.ItemLv)
-                    .ThenBy(data => Game.获取多语言_MagicCard_name(string.IsNullOrEmpty(data.name) ? data.id : data.name))
+                    .ThenBy(data => Game.获取多语言_MagicCard名称(data.id))
                     .ToList();
             }
             catch (Exception ex)
@@ -890,7 +890,7 @@ namespace Cinderia_Mod_Item_Legacy
                 .FirstOrDefault(data =>
                     string.Equals(data.id, token, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(data.name, token, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(Game.获取多语言_MagicCard_name(string.IsNullOrEmpty(data.name) ? data.id : data.name), token, StringComparison.OrdinalIgnoreCase));
+                    || string.Equals(Game.获取多语言_MagicCard名称(data.id), token, StringComparison.OrdinalIgnoreCase));
 
             return byName?.id;
         }

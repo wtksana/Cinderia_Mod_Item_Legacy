@@ -676,7 +676,7 @@ namespace Cinderia_Mod_Item_Legacy
 
                     绘制道具图标(道具, new Rect(条目区域.x + (条目区域.width - 40f) * 0.5f, 条目区域.y + 12f, 40f, 40f));
 
-                    string 名称 = Game.获取多语言_MagicCard_name(string.IsNullOrEmpty(道具.name) ? 道具.id : 道具.name);
+                    string 名称 = Game.获取多语言_MagicCard名称(道具.id);
                     GUI.Label(
                         new Rect(条目区域.x + 12f, 条目区域.y + 56f, 条目区域.width - 24f, 36f),
                         名称,
@@ -712,7 +712,7 @@ namespace Cinderia_Mod_Item_Legacy
             _currentRequest.详情滚动位置 = GUILayout.BeginScrollView(_currentRequest.详情滚动位置, false, true);
 
             DataMagicCard 当前预览 = _currentRequest.候选道具[Mathf.Clamp(当前绘制预览索引, 0, _currentRequest.候选道具.Count - 1)];
-            string 名称 = Game.获取多语言_MagicCard_name(string.IsNullOrEmpty(当前预览.name) ? 当前预览.id : 当前预览.name);
+            string 名称 = Game.获取多语言_MagicCard名称(当前预览.id);
 
             GUILayout.Label(名称, _detailTitleStyle);
             GUILayout.Space(8f);
@@ -732,7 +732,7 @@ namespace Cinderia_Mod_Item_Legacy
 
             GUILayout.Space(8f);
             GUILayout.Label("描述", _detailTitleStyle);
-            GUILayout.Label(Game.获取多语言_MagicCard_introduce(当前预览.introduce), _detailTextStyle);
+            GUILayout.Label(Game.获取多语言_MagicCard描述(当前预览.id), _detailTextStyle);
 
             GUILayout.EndScrollView();
             GUILayout.EndArea();
@@ -901,7 +901,7 @@ namespace Cinderia_Mod_Item_Legacy
 
         private static string 获取描述首行(DataMagicCard 道具)
         {
-            string 描述 = Game.获取多语言_MagicCard_introduce(道具.introduce) ?? "";
+            string 描述 = Game.获取多语言_MagicCard描述(道具.id) ?? "";
             return 描述.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
         }
 
