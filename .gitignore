@@ -14,7 +14,7 @@
 
 # 本地工具/临时目录
 GameSource/
-tmp_decompile/
+tmp_decompile*/
 
 # 指向游戏根目录的 junction(由 mklink /J 生成,不应入库)
 Cinderia_Game

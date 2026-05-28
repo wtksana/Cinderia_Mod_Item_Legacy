@@ -119,6 +119,10 @@
       <HintPath>Cinderia_Game\Cinderia_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>Cinderia_Game\Cinderia_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="FMODUnity">
       <HintPath>Cinderia_Game\Cinderia_Data\Managed\FMODUnity.dll</HintPath>
       <Private>False</Private>
@@ -127,6 +131,7 @@
   <ItemGroup>
     <Compile Include="Cinderia_Mod_Item_Legacy.cs" />
     <Compile Include="ChestRewardSelection.cs" />
+    <Compile Include="DebugGUI.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -9,6 +9,9 @@
 - 藏宝图调整：统一 `藏宝图2`、`藏宝图3`、`藏宝图4` 的清场掉海盗宝箱逻辑，并支持配置最高级藏宝图的小/中/大宝箱概率。
 - 上一局继承：结算时记录本局全部道具，下局进入第一个房间时弹窗让玩家选择一个继承。
 - 技能选择刷新：在原版主动/被动技能选择刷新次数基础上额外增加配置次数。
+- **调试功能**：
+  - **F9 配置界面**：游戏中按 F9 打开配置窗口，可实时修改所有 mod 配置项并保存。
+  - **F10 道具选择**：游戏中按 F10 打开道具选择窗口，列出所有最高级道具，点击即可在角色旁掉落。
 
 ## 项目结构
 
@@ -16,6 +19,7 @@
 Cinderia_Mod_Item_Legacy/
 ├─ Cinderia_Mod_Item_Legacy.cs       # 主插件、配置、道具注入、藏宝图、继承、刷新次数、Harmony 补丁
 ├─ ChestRewardSelection.cs           # 自选开箱流程和 IMGUI 选择界面
+├─ DebugGUI.cs                       # F9 配置界面和 F10 道具选择界面
 ├─ Cinderia_Mod_Item_Legacy.csproj   # .NET Framework 4.7.2 项目文件
 ├─ Cinderia_Mod_Item_Legacy.slnx     # 解决方案入口
 ├─ Cinderia_Game/                    # junction 链接，指向游戏根目录，提供程序集引用与 DLL 部署目标（.gitignore 已忽略）
@@ -61,6 +65,21 @@ dotnet build .\Cinderia_Mod_Item_Legacy.csproj -t:Rebuild
 ```
 
 构建成功后，DLL 会写入 `Cinderia_Game/BepInEx/plugins/`。启动游戏后可在 `Cinderia_Game/BepInEx/LogOutput.log` 中查看插件日志，日志前缀为 `Cinderia_Mod_Item_Legacy`。
+
+## 游戏内快捷键
+
+- **F9**：打开/关闭 Mod 配置界面
+  - 实时修改所有配置项（复制器概率、自选开箱、继承、藏宝图、技能刷新等）
+  - 配置项带中文名称、说明和生效时机提示
+  - 点击"保存配置"按钮保存到配置文件
+  - 界面尺寸：1000x700，字体清晰易读
+  
+- **F10**：打开/关闭道具选择界面
+  - 按等级（白/绿/蓝/紫/橙）筛选所有道具
+  - 网格布局显示道具卡片，带图标和名称
+  - 点击道具卡片即可在角色旁掉落
+  - 右侧显示道具详情（名称、稀有度、描述）
+  - 包含 mod 新增的复制器道具
 
 ## 配置
 

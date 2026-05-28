@@ -96,6 +96,8 @@ namespace Cinderia_Mod_Item_Legacy
             _harmony = new Harmony("Cinderia_Mod_Item_Legacy");
             _harmony.PatchAll();
 
+            DebugGUI.初始化();
+
             Log.LogInfo("[Cinderia_Mod_Item_Legacy] Plugin loaded.");
         }
 
@@ -562,6 +564,33 @@ namespace Cinderia_Mod_Item_Legacy
         internal static bool 是否为复制器道具Id(string itemId)
         {
             return !string.IsNullOrEmpty(itemId) && itemId.StartsWith("复制器", StringComparison.Ordinal);
+        }
+
+        // ===== 公开配置访问接口，供 DebugGUI 使用 =====
+        internal static List<ConfigEntryBase> 获取所有配置()
+        {
+            var 配置列表 = new List<ConfigEntryBase>();
+            if (_configFile == null) return 配置列表;
+
+            配置列表.Add(Cfg_复制器_启用);
+            配置列表.Add(Cfg_复制器_绿概率);
+            配置列表.Add(Cfg_复制器_蓝概率);
+            配置列表.Add(Cfg_复制器_紫概率);
+            配置列表.Add(Cfg_复制器_橙概率);
+            配置列表.Add(Cfg_自选开箱_启用);
+            配置列表.Add(Cfg_上一局继承_启用);
+            配置列表.Add(Cfg_上一局继承_候选列表);
+            配置列表.Add(Cfg_藏宝图4_小宝箱概率);
+            配置列表.Add(Cfg_藏宝图4_中宝箱概率);
+            配置列表.Add(Cfg_藏宝图4_大宝箱概率);
+            配置列表.Add(Cfg_技能选择额外刷新次数);
+
+            return 配置列表;
+        }
+
+        internal static void 保存配置()
+        {
+            _configFile?.Save();
         }
 
         internal static bool 是否为藏宝图Buff(string buffId)
@@ -1088,5 +1117,4 @@ namespace Cinderia_Mod_Item_Legacy
         internal float Middle { get; }
         internal float Big { get; }
     }
-
 }
